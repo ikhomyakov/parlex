@@ -9,6 +9,8 @@ use std::collections::VecDeque;
 use std::iter::FusedIterator;
 use std::mem;
 
+use crate::Token;
+
 pub trait Mode: Sized + Copy + std::fmt::Debug + Into<usize> {
     const COUNT: usize;
 }
@@ -18,65 +20,74 @@ pub trait Rule: Sized + Copy + std::fmt::Debug + Into<usize> {
     const END: Self;
 }
 
-pub trait Token: Sized + Copy + std::fmt::Debug {}
-
 pub trait LexerTab {
     type Mode: Mode;
     type Rule: Rule;
-
     fn lookup(&self, mode: Self::Mode, pattern_id: PatternID) -> Self::Rule;
+}
+
+pub trait LexerData {
+    type LexerTab: LexerTab;
+
+    fn start_mode(&self) -> <Self::LexerTab as LexerTab>::Mode;
+    fn tab(&self) -> Self::LexerTab;
+    fn dfa_bytes(&self) -> &'static [u8];
 }
 
 pub trait Lexer<I>
 where
     I: FusedIterator<Item = u8>,
 {
-    type LexerTab: LexerTab;
+    type LexerData: LexerData;
     type Token: Token;
 
-    fn base(&self) -> &LexerBase<I, Self::LexerTab, Self::Token>;
-    fn base_mut(&mut self) -> &mut LexerBase<I, Self::LexerTab, Self::Token>;
+    #[inline(always)]
+    fn ctx(&self) -> &LexerCtx<I, Self::LexerData, Self::Token>;
+    #[inline(always)]
+    fn ctx_mut(&mut self) -> &mut LexerCtx<I, Self::LexerData, Self::Token>;
 
-    fn action(&mut self, rule: <<Self as Lexer<I>>::LexerTab as LexerTab>::Rule);
+    #[inline]
+    fn action(&mut self, rule: <<Self::LexerData as LexerData>::LexerTab as LexerTab>::Rule);
 
+    #[inline]
     fn try_next(&mut self) -> Result<Option<Self::Token>> {
-        if let Some(t) = self.base_mut().tokens.pop_front() {
+        if let Some(t) = self.ctx_mut().tokens.pop_front() {
             return Ok(Some(t));
         }
 
-        if self.base().end_flag {
+        if self.ctx().end_flag {
             return Ok(None);
         }
 
-        while let Some(pattern) = self.base_mut().try_match()? {
-            let mode = self.base().mode;
-            let rule = self.base_mut().tab.lookup(mode, pattern);
+        while let Some(pattern) = self.ctx_mut().try_match()? {
+            let mode = self.ctx().mode;
+            let rule = self.ctx_mut().tab.lookup(mode, pattern);
             log::trace!(
                 "MATCHED: Mode: {:?}, Rule: {:?}, Pattern: {}, Buffer: {:?}, Buffer2: {:?}",
-                self.base().mode,
+                self.ctx().mode,
                 rule,
                 pattern.as_usize(),
-                match str::from_utf8(&self.base().buffer) {
+                match str::from_utf8(&self.ctx().buffer) {
                     Ok(s) => s,
-                    Err(_) => &hex::encode(&self.base().buffer),
+                    Err(_) => &hex::encode(&self.ctx().buffer),
                 },
-                match str::from_utf8(&self.base().buffer2) {
+                match str::from_utf8(&self.ctx().buffer2) {
                     Ok(s) => s,
-                    Err(_) => &hex::encode(&self.base().buffer2),
+                    Err(_) => &hex::encode(&self.ctx().buffer2),
                 },
             );
 
             self.action(rule);
 
-            if let Some(t) = self.base_mut().tokens.pop_front() {
+            if let Some(t) = self.ctx_mut().tokens.pop_front() {
                 return Ok(Some(t));
             }
         }
-        self.base_mut().end_flag = true;
+        self.ctx_mut().end_flag = true;
 
-        self.action(<<Self as Lexer<I>>::LexerTab as LexerTab>::Rule::END);
+        self.action(<<Self::LexerData as LexerData>::LexerTab as LexerTab>::Rule::END);
 
-        if let Some(t) = self.base_mut().tokens.pop_front() {
+        if let Some(t) = self.ctx_mut().tokens.pop_front() {
             return Ok(Some(t));
         } else {
             return Ok(None);
@@ -85,21 +96,21 @@ where
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Stats {
+pub struct LexerStats {
     pub unreads: usize,
     pub chars: usize,
     pub matches: usize,
 }
 
-pub struct LexerBase<I, L, T>
+pub struct LexerCtx<I, D, T>
 where
     I: FusedIterator<Item = u8>,
-    L: LexerTab,
+    D: LexerData,
     T: Token,
 {
-    pub mode: L::Mode,
+    pub mode: <<D as LexerData>::LexerTab as LexerTab>::Mode,
 
-    tab: L,
+    tab: <D as LexerData>::LexerTab,
     dfas: Vec<dense::DFA<&'static [u32]>>,
 
     input: I,
@@ -114,27 +125,28 @@ where
 
     pub line_no: usize,
 
-    stats: Stats,
+    stats: LexerStats,
 }
 
-impl<I, L, T> LexerBase<I, L, T>
+impl<I, D, T> LexerCtx<I, D, T>
 where
     I: FusedIterator<Item = u8>,
-    L: LexerTab,
+    D: LexerData,
     T: Token,
 {
-    pub fn try_new(input: I, tab: L, dfa_bytes: &'static [u8], start: L::Mode) -> Result<Self> {
+    pub fn try_new(input: I, data: D) -> Result<Self> {
         let mut dfas = Vec::new();
+        let dfa_bytes = data.dfa_bytes();
         let mut offset = 0;
-        for _ in 0..L::Mode::COUNT {
+        for _ in 0..<<D as LexerData>::LexerTab as LexerTab>::Mode::COUNT {
             let (dfa, len) = dense::DFA::from_bytes(&dfa_bytes[offset..])?;
             dfas.push(dfa);
             offset += len;
         }
 
         Ok(Self {
-            mode: start,
-            tab,
+            mode: data.start_mode(),
+            tab: data.tab(),
             dfas,
             input,
             unread: Vec::new(),
@@ -144,11 +156,11 @@ where
             end_flag: false,
             tokens: VecDeque::new(),
             line_no: 1,
-            stats: Stats::default(),
+            stats: LexerStats::default(),
         })
     }
 
-    pub fn stats(&self) -> Stats {
+    pub fn stats(&self) -> LexerStats {
         self.stats
     }
 
@@ -260,7 +272,7 @@ where
         self.accum_flag = true;
     }
 
-    fn begin(&mut self, mode: L::Mode) {
+    fn begin(&mut self, mode: <<D as LexerData>::LexerTab as LexerTab>::Mode) {
         self.mode = mode;
     }
 
@@ -335,8 +347,24 @@ mod tests {
             type Mode = XMode;
             type Rule = XRule;
 
-            fn lookup(&self, mode: Self::Mode, pattern_id: PatternID) -> Self::Rule {
+            #[inline]
+            fn lookup(&self, _mode: Self::Mode, _pattern_id: PatternID) -> Self::Rule {
                 XRule
+            }
+        }
+
+        struct XLexerData {}
+        impl LexerData for XLexerData {
+            type LexerTab = XLexerTab;
+
+            fn start_mode(&self) -> <Self::LexerTab as LexerTab>::Mode {
+                XMode
+            }
+            fn tab(&self) -> Self::LexerTab {
+                XLexerTab {}
+            }
+            fn dfa_bytes(&self) -> &'static [u8] {
+                &[]
             }
         }
 
@@ -344,44 +372,42 @@ mod tests {
         where
             I: FusedIterator<Item = u8>,
         {
-            base: LexerBase<I, <Self as Lexer<I>>::LexerTab, <Self as Lexer<I>>::Token>,
+            ctx: LexerCtx<I, <Self as Lexer<I>>::LexerData, <Self as Lexer<I>>::Token>,
         }
         impl<I> XLexer<I>
         where
             I: FusedIterator<Item = u8>,
         {
-            fn try_new(
-                input: I,
-                tab: XLexerTab,
-                dfa_bytes: &'static [u8],
-                start: XMode,
-            ) -> Result<Self> {
-                let mut base = LexerBase::try_new(input, tab, dfa_bytes, start)?;
-                base.end_flag = true;
-                Ok(Self { base })
+            fn try_new(input: I, data: XLexerData) -> Result<Self> {
+                let mut ctx = LexerCtx::try_new(input, data)?;
+                ctx.end_flag = true;
+                Ok(Self { ctx })
             }
         }
         impl<I> Lexer<I> for XLexer<I>
         where
             I: FusedIterator<Item = u8>,
         {
-            type LexerTab = XLexerTab;
+            type LexerData = XLexerData;
             type Token = XToken;
 
-            fn base(&self) -> &LexerBase<I, Self::LexerTab, Self::Token> {
-                &self.base
+            fn ctx(&self) -> &LexerCtx<I, Self::LexerData, Self::Token> {
+                &self.ctx
             }
-            fn base_mut(&mut self) -> &mut LexerBase<I, Self::LexerTab, Self::Token> {
-                &mut self.base
+            fn ctx_mut(&mut self) -> &mut LexerCtx<I, Self::LexerData, Self::Token> {
+                &mut self.ctx
             }
 
-            fn action(&mut self, _rule: <<Self as Lexer<I>>::LexerTab as LexerTab>::Rule) {
-                self.base_mut().yield_token(XToken {});
+            fn action(
+                &mut self,
+                _rule: <<Self::LexerData as LexerData>::LexerTab as LexerTab>::Rule,
+            ) {
+                self.ctx_mut().yield_token(XToken {});
             }
         }
 
         let s = "hello";
-        let mut lexer = XLexer::try_new(s.bytes().fuse(), XLexerTab {}, &[], XMode {}).unwrap();
+        let mut lexer = XLexer::try_new(s.bytes().fuse(), XLexerData {}).unwrap();
         while let Some(t) = lexer.try_next().unwrap() {
             dbg!(t);
         }

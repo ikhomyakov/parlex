@@ -119,7 +119,7 @@ where
     pub buffer: Vec<u8>,
     pub buffer2: Vec<u8>,
 
-    end_flag: bool,
+    pub end_flag: bool,
     tokens: VecDeque<T>,
 
     pub line_no: usize,
@@ -263,41 +263,41 @@ where
         }
     }
 
-    fn accum(&mut self) {
+    pub fn accum(&mut self) {
         self.accum_flag = true;
     }
 
-    fn begin(&mut self, mode: D::LexerMode) {
+    pub fn begin(&mut self, mode: D::LexerMode) {
         self.mode = mode;
     }
 
-    fn yield_token(&mut self, token: T) {
+    pub fn yield_token(&mut self, token: T) {
         self.tokens.push_back(token);
     }
 
-    fn clear(&mut self) {
+    pub fn clear(&mut self) {
         self.accum_flag = false;
         self.buffer.clear();
     }
 
-    fn take_bytes(&mut self) -> Vec<u8> {
+    pub fn take_bytes(&mut self) -> Vec<u8> {
         self.accum_flag = false;
         mem::take(&mut self.buffer)
     }
 
-    fn take_bytes2(&mut self) -> Vec<u8> {
+    pub fn take_bytes2(&mut self) -> Vec<u8> {
         self.accum_flag = false;
         self.buffer.clear();
         mem::take(&mut self.buffer2)
     }
 
-    fn take_str(&mut self) -> Result<String> {
+    pub fn take_str(&mut self) -> Result<String> {
         let bytes = self.take_bytes();
         let s = std::string::String::from_utf8(bytes)?;
         Ok(s.into())
     }
 
-    fn take_str2(&mut self) -> Result<String> {
+    pub fn take_str2(&mut self) -> Result<String> {
         let bytes = self.take_bytes2();
         let s = std::string::String::from_utf8(bytes)?;
         Ok(s.into())

@@ -258,6 +258,10 @@ mod tests {
     use std::fmt::Debug;
     use std::iter::FusedIterator;
 
+    fn init_logger() {
+        let _ = env_logger::builder().is_test(true).try_init();
+    }
+
     #[derive(Debug, Clone, Copy)]
     struct XLexerMode;
     impl LexerMode for XLexerMode {
@@ -496,6 +500,7 @@ mod tests {
 
     #[test]
     fn empty_parser() {
+        init_logger();
         let s = "hello";
         let mut parser = XParser::try_new(s.bytes().fuse()).unwrap();
         while let Some(t) = parser.try_next().unwrap() {

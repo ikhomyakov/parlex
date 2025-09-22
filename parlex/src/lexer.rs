@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, bail};
 use regex_automata::{
     Anchored, HalfMatch, Input,
     dfa::{Automaton, dense},
@@ -308,107 +308,112 @@ where
 mod tests {
     use super::*;
 
+    fn init_logger() {
+        let _ = env_logger::builder().is_test(true).try_init();
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    struct XLexerMode;
+    impl LexerMode for XLexerMode {
+        const COUNT: usize = 0;
+    }
+    impl Into<usize> for XLexerMode {
+        fn into(self) -> usize {
+            0
+        }
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    struct XLexerRule;
+    impl LexerRule for XLexerRule {
+        const COUNT: usize = 0;
+        const END: Self = Self;
+    }
+    impl Into<usize> for XLexerRule {
+        fn into(self) -> usize {
+            0
+        }
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    struct XToken {
+        token_id: usize,
+        line_no: usize,
+    }
+    impl Token for XToken {
+        type TokenID = usize;
+
+        fn token_id(&self) -> Self::TokenID {
+            self.token_id
+        }
+        fn line_no(&self) -> usize {
+            self.line_no
+        }
+    }
+
+    struct XLexerData {}
+    impl LexerData for XLexerData {
+        type LexerMode = XLexerMode;
+        type LexerRule = XLexerRule;
+
+        fn start_mode(&self) -> Self::LexerMode {
+            XLexerMode
+        }
+        fn dfa_bytes(&self) -> &'static [u8] {
+            &[]
+        }
+
+        #[inline]
+        fn lookup(&self, _mode: Self::LexerMode, _pattern_id: PatternID) -> Self::LexerRule {
+            XLexerRule
+        }
+    }
+
+    struct XLexer<I>
+    where
+        I: FusedIterator<Item = u8>,
+    {
+        ctx: LexerCtx<I, <Self as Lexer>::LexerData, <Self as Lexer>::Token>,
+    }
+
+    impl<I> XLexer<I>
+    where
+        I: FusedIterator<Item = u8>,
+    {
+        fn try_new(input: I, data: XLexerData) -> Result<Self> {
+            let mut ctx = LexerCtx::try_new(input, data)?;
+            ctx.end_flag = true;
+            Ok(Self { ctx })
+        }
+    }
+
+    impl<I> Lexer for XLexer<I>
+    where
+        I: FusedIterator<Item = u8>,
+    {
+        type Input = I;
+        type LexerData = XLexerData;
+        type Token = XToken;
+
+        fn ctx(&self) -> &LexerCtx<Self::Input, Self::LexerData, Self::Token> {
+            &self.ctx
+        }
+        fn ctx_mut(&mut self) -> &mut LexerCtx<Self::Input, Self::LexerData, Self::Token> {
+            &mut self.ctx
+        }
+
+        fn action(&mut self, _rule: <Self::LexerData as LexerData>::LexerRule) -> Result<()> {
+            self.ctx_mut().yield_token(XToken {
+                token_id: 0,
+                line_no: 0,
+            });
+            Ok(())
+        }
+    }
+
     #[test]
     fn empty_lexer() {
-        #[derive(Debug, Clone, Copy)]
-        struct XLexerMode;
-        impl LexerMode for XLexerMode {
-            const COUNT: usize = 0;
-        }
-        impl Into<usize> for XLexerMode {
-            fn into(self) -> usize {
-                0
-            }
-        }
-
-        #[derive(Debug, Clone, Copy)]
-        struct XLexerRule;
-        impl LexerRule for XLexerRule {
-            const COUNT: usize = 0;
-            const END: Self = Self;
-        }
-        impl Into<usize> for XLexerRule {
-            fn into(self) -> usize {
-                0
-            }
-        }
-
-        #[derive(Debug, Clone, Copy)]
-        struct XToken {
-            token_id: usize,
-            line_no: usize,
-        }
-        impl Token for XToken {
-            type TokenID = usize;
-
-            fn token_id(&self) -> Self::TokenID {
-                self.token_id
-            }
-            fn line_no(&self) -> usize {
-                self.line_no
-            }
-        }
-
-        struct XLexerData {}
-        impl LexerData for XLexerData {
-            type LexerMode = XLexerMode;
-            type LexerRule = XLexerRule;
-
-            fn start_mode(&self) -> Self::LexerMode {
-                XLexerMode
-            }
-            fn dfa_bytes(&self) -> &'static [u8] {
-                &[]
-            }
-
-            #[inline]
-            fn lookup(&self, _mode: Self::LexerMode, _pattern_id: PatternID) -> Self::LexerRule {
-                XLexerRule
-            }
-        }
-
-        struct XLexer<I>
-        where
-            I: FusedIterator<Item = u8>,
-        {
-            ctx: LexerCtx<I, <Self as Lexer>::LexerData, <Self as Lexer>::Token>,
-        }
-
-        impl<I> XLexer<I>
-        where
-            I: FusedIterator<Item = u8>,
-        {
-            fn try_new(input: I, data: XLexerData) -> Result<Self> {
-                let mut ctx = LexerCtx::try_new(input, data)?;
-                ctx.end_flag = true;
-                Ok(Self { ctx })
-            }
-        }
-
-        impl<I> Lexer for XLexer<I>
-        where
-            I: FusedIterator<Item = u8>,
-        {
-            type Input = I;
-            type LexerData = XLexerData;
-            type Token = XToken;
-
-            fn ctx(&self) -> &LexerCtx<Self::Input, Self::LexerData, Self::Token> {
-                &self.ctx
-            }
-            fn ctx_mut(&mut self) -> &mut LexerCtx<Self::Input, Self::LexerData, Self::Token> {
-                &mut self.ctx
-            }
-
-            fn action(&mut self, _rule: <Self::LexerData as LexerData>::LexerRule) -> Result<()> {
-                self.ctx_mut().yield_token(XToken {
-                    token_id: 0,
-                    line_no: 0,
-                });
-                Ok(())
-            }
-        }
-
+        init_logger();
         let s = "hello";
         let mut lexer = XLexer::try_new(s.bytes().fuse(), XLexerData {}).unwrap();
         while let Some(t) = lexer.try_next().unwrap() {

@@ -6,48 +6,49 @@ use regex_automata::{
 };
 use smartstring::alias::String;
 use std::collections::VecDeque;
+use std::fmt::Debug;
 use std::iter::FusedIterator;
 use std::mem;
 
-use crate::Token;
+pub trait Token: Copy + Debug {
+    type TokenID: Into<usize>;
 
-pub trait Mode: Sized + Copy + std::fmt::Debug + Into<usize> {
+    fn token_id(&self) -> Self::TokenID;
+    fn line_no(&self) -> usize;
+}
+
+pub trait LexerMode: Copy + Debug + Into<usize> {
     const COUNT: usize;
 }
 
-pub trait Rule: Sized + Copy + std::fmt::Debug + Into<usize> {
+pub trait LexerRule: Copy + Debug + Into<usize> {
     const COUNT: usize;
     const END: Self;
 }
 
-pub trait LexerTab {
-    type Mode: Mode;
-    type Rule: Rule;
-    fn lookup(&self, mode: Self::Mode, pattern_id: PatternID) -> Self::Rule;
-}
-
 pub trait LexerData {
-    type LexerTab: LexerTab;
+    type LexerMode: LexerMode;
+    type LexerRule: LexerRule;
 
-    fn start_mode(&self) -> <Self::LexerTab as LexerTab>::Mode;
-    fn tab(&self) -> Self::LexerTab;
+    fn start_mode(&self) -> Self::LexerMode;
     fn dfa_bytes(&self) -> &'static [u8];
+
+    fn lookup(&self, mode: Self::LexerMode, pattern_id: PatternID) -> Self::LexerRule;
 }
 
-pub trait Lexer<I>
-where
-    I: FusedIterator<Item = u8>,
-{
+pub trait Lexer {
+    type Input: FusedIterator<Item = u8>;
     type LexerData: LexerData;
     type Token: Token;
 
-    #[inline(always)]
-    fn ctx(&self) -> &LexerCtx<I, Self::LexerData, Self::Token>;
-    #[inline(always)]
-    fn ctx_mut(&mut self) -> &mut LexerCtx<I, Self::LexerData, Self::Token>;
+    fn ctx(&self) -> &LexerCtx<Self::Input, Self::LexerData, Self::Token>;
+    fn ctx_mut(&mut self) -> &mut LexerCtx<Self::Input, Self::LexerData, Self::Token>;
 
-    #[inline]
-    fn action(&mut self, rule: <<Self::LexerData as LexerData>::LexerTab as LexerTab>::Rule);
+    fn action(&mut self, rule: <Self::LexerData as LexerData>::LexerRule) -> Result<()>;
+
+    fn stats(&self) -> LexerStats {
+        self.ctx().stats.clone()
+    }
 
     #[inline]
     fn try_next(&mut self) -> Result<Option<Self::Token>> {
@@ -61,10 +62,10 @@ where
 
         while let Some(pattern) = self.ctx_mut().try_match()? {
             let mode = self.ctx().mode;
-            let rule = self.ctx_mut().tab.lookup(mode, pattern);
+            let rule = self.ctx().data.lookup(mode, pattern);
             log::trace!(
-                "MATCHED: Mode: {:?}, Rule: {:?}, Pattern: {}, Buffer: {:?}, Buffer2: {:?}",
-                self.ctx().mode,
+                "MATCHED: LexerMode: {:?}, LexerRule: {:?}, Pattern: {}, Buffer: {:?}, Buffer2: {:?}",
+                mode,
                 rule,
                 pattern.as_usize(),
                 match str::from_utf8(&self.ctx().buffer) {
@@ -77,7 +78,7 @@ where
                 },
             );
 
-            self.action(rule);
+            self.action(rule)?;
 
             if let Some(t) = self.ctx_mut().tokens.pop_front() {
                 return Ok(Some(t));
@@ -85,7 +86,7 @@ where
         }
         self.ctx_mut().end_flag = true;
 
-        self.action(<<Self::LexerData as LexerData>::LexerTab as LexerTab>::Rule::END);
+        self.action(<Self::LexerData as LexerData>::LexerRule::END)?;
 
         if let Some(t) = self.ctx_mut().tokens.pop_front() {
             return Ok(Some(t));
@@ -95,7 +96,7 @@ where
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct LexerStats {
     pub unreads: usize,
     pub chars: usize,
@@ -104,13 +105,11 @@ pub struct LexerStats {
 
 pub struct LexerCtx<I, D, T>
 where
-    I: FusedIterator<Item = u8>,
     D: LexerData,
-    T: Token,
 {
-    pub mode: <<D as LexerData>::LexerTab as LexerTab>::Mode,
+    pub mode: D::LexerMode,
 
-    tab: <D as LexerData>::LexerTab,
+    data: D,
     dfas: Vec<dense::DFA<&'static [u32]>>,
 
     input: I,
@@ -138,7 +137,7 @@ where
         let mut dfas = Vec::new();
         let dfa_bytes = data.dfa_bytes();
         let mut offset = 0;
-        for _ in 0..<<D as LexerData>::LexerTab as LexerTab>::Mode::COUNT {
+        for _ in 0..D::LexerMode::COUNT {
             let (dfa, len) = dense::DFA::from_bytes(&dfa_bytes[offset..])?;
             dfas.push(dfa);
             offset += len;
@@ -146,7 +145,7 @@ where
 
         Ok(Self {
             mode: data.start_mode(),
-            tab: data.tab(),
+            data,
             dfas,
             input,
             unread: Vec::new(),
@@ -158,10 +157,6 @@ where
             line_no: 1,
             stats: LexerStats::default(),
         })
-    }
-
-    pub fn stats(&self) -> LexerStats {
-        self.stats
     }
 
     fn try_match(&mut self) -> Result<Option<PatternID>> {
@@ -272,7 +267,7 @@ where
         self.accum_flag = true;
     }
 
-    fn begin(&mut self, mode: <<D as LexerData>::LexerTab as LexerTab>::Mode) {
+    fn begin(&mut self, mode: D::LexerMode) {
         self.mode = mode;
     }
 
@@ -316,55 +311,59 @@ mod tests {
     #[test]
     fn empty_lexer() {
         #[derive(Debug, Clone, Copy)]
-        struct XMode;
-        impl Mode for XMode {
+        struct XLexerMode;
+        impl LexerMode for XLexerMode {
             const COUNT: usize = 0;
         }
-        impl Into<usize> for XMode {
+        impl Into<usize> for XLexerMode {
             fn into(self) -> usize {
                 0
             }
         }
 
         #[derive(Debug, Clone, Copy)]
-        struct XRule;
-        impl Rule for XRule {
+        struct XLexerRule;
+        impl LexerRule for XLexerRule {
             const COUNT: usize = 0;
             const END: Self = Self;
         }
-        impl Into<usize> for XRule {
+        impl Into<usize> for XLexerRule {
             fn into(self) -> usize {
                 0
             }
         }
 
         #[derive(Debug, Clone, Copy)]
-        struct XToken;
-        impl Token for XToken {}
+        struct XToken {
+            token_id: usize,
+            line_no: usize,
+        }
+        impl Token for XToken {
+            type TokenID = usize;
 
-        struct XLexerTab {}
-        impl LexerTab for XLexerTab {
-            type Mode = XMode;
-            type Rule = XRule;
-
-            #[inline]
-            fn lookup(&self, _mode: Self::Mode, _pattern_id: PatternID) -> Self::Rule {
-                XRule
+            fn token_id(&self) -> Self::TokenID {
+                self.token_id
+            }
+            fn line_no(&self) -> usize {
+                self.line_no
             }
         }
 
         struct XLexerData {}
         impl LexerData for XLexerData {
-            type LexerTab = XLexerTab;
+            type LexerMode = XLexerMode;
+            type LexerRule = XLexerRule;
 
-            fn start_mode(&self) -> <Self::LexerTab as LexerTab>::Mode {
-                XMode
-            }
-            fn tab(&self) -> Self::LexerTab {
-                XLexerTab {}
+            fn start_mode(&self) -> Self::LexerMode {
+                XLexerMode
             }
             fn dfa_bytes(&self) -> &'static [u8] {
                 &[]
+            }
+
+            #[inline]
+            fn lookup(&self, _mode: Self::LexerMode, _pattern_id: PatternID) -> Self::LexerRule {
+                XLexerRule
             }
         }
 
@@ -372,8 +371,9 @@ mod tests {
         where
             I: FusedIterator<Item = u8>,
         {
-            ctx: LexerCtx<I, <Self as Lexer<I>>::LexerData, <Self as Lexer<I>>::Token>,
+            ctx: LexerCtx<I, <Self as Lexer>::LexerData, <Self as Lexer>::Token>,
         }
+
         impl<I> XLexer<I>
         where
             I: FusedIterator<Item = u8>,
@@ -384,25 +384,28 @@ mod tests {
                 Ok(Self { ctx })
             }
         }
-        impl<I> Lexer<I> for XLexer<I>
+
+        impl<I> Lexer for XLexer<I>
         where
             I: FusedIterator<Item = u8>,
         {
+            type Input = I;
             type LexerData = XLexerData;
             type Token = XToken;
 
-            fn ctx(&self) -> &LexerCtx<I, Self::LexerData, Self::Token> {
+            fn ctx(&self) -> &LexerCtx<Self::Input, Self::LexerData, Self::Token> {
                 &self.ctx
             }
-            fn ctx_mut(&mut self) -> &mut LexerCtx<I, Self::LexerData, Self::Token> {
+            fn ctx_mut(&mut self) -> &mut LexerCtx<Self::Input, Self::LexerData, Self::Token> {
                 &mut self.ctx
             }
 
-            fn action(
-                &mut self,
-                _rule: <<Self::LexerData as LexerData>::LexerTab as LexerTab>::Rule,
-            ) {
-                self.ctx_mut().yield_token(XToken {});
+            fn action(&mut self, _rule: <Self::LexerData as LexerData>::LexerRule) -> Result<()> {
+                self.ctx_mut().yield_token(XToken {
+                    token_id: 0,
+                    line_no: 0,
+                });
+                Ok(())
             }
         }
 

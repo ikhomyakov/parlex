@@ -7,26 +7,22 @@ mod real {
     #[derive(Parser)]
     #[command(about = "Generate lexer code from ALEX spec")]
     struct Args {
-        /// Path to the input Alex specification file
+        /// Path to the input Alex specification file.
         #[arg(short = 's', long)]
         spec: PathBuf,
 
-        /// Path to write the generated Rust source code
-        #[arg(short = 'R', long)]
-        rust: PathBuf,
+        /// Path to the output directory.
+        #[arg(short = 'o', long)]
+        output_dir: PathBuf,
 
-        /// Path to write the generated DFA in binary big-endian format
-        #[arg(short = 'B', long)]
-        dfa_be: PathBuf,
-
-        /// Path to write the generated DFA in binary little-endian format
-        #[arg(short = 'L', long)]
-        dfa_le: PathBuf,
+        /// Prefix used to construct output file names.
+        #[arg(short = 'n', long)]
+        name: String,
     }
 
     pub fn main() -> anyhow::Result<()> {
         let args = Args::parse();
-        alex::generate(args.spec, args.rust, args.dfa_be, args.dfa_le)
+        alex::generate(args.spec, args.output_dir, args.name)
     }
 }
 

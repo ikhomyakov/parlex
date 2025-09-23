@@ -11,14 +11,18 @@ mod real {
         #[arg(short = 'g', long)]
         grammar: PathBuf,
 
-        /// Path to write the generated Rust source code
-        #[arg(short = 'R', long)]
-        rust: PathBuf,
+        /// Path to the output directory.
+        #[arg(short = 'o', long)]
+        output_dir: PathBuf,
+
+        /// Prefix used to construct output file name
+        #[arg(short = 'n', long)]
+        name: String,
     }
 
     pub fn main() -> anyhow::Result<()> {
         let args = Args::parse();
-        aslr::generate(args.grammar, args.rust)
+        aslr::generate(args.grammar, args.output_dir, args.name)
     }
 }
 

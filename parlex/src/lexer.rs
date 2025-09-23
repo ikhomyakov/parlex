@@ -30,10 +30,13 @@ pub trait LexerData {
     type LexerMode: LexerMode;
     type LexerRule: LexerRule;
 
-    fn start_mode(&self) -> Self::LexerMode;
-    fn dfa_bytes(&self) -> &'static [u8];
+    fn start_mode() -> Self::LexerMode;
+    fn dfa_bytes() -> &'static [u8];
+    fn dfa_offsets() -> &'static [usize] {
+        &[]
+    }
 
-    fn lookup(&self, mode: Self::LexerMode, pattern_id: PatternID) -> Self::LexerRule;
+    fn lookup(mode: Self::LexerMode, pattern_id: usize) -> Self::LexerRule;
 }
 
 pub trait Lexer {
@@ -62,7 +65,7 @@ pub trait Lexer {
 
         while let Some(pattern) = self.ctx_mut().try_match()? {
             let mode = self.ctx().mode;
-            let rule = self.ctx().data.lookup(mode, pattern);
+            let rule = <Self as Lexer>::LexerData::lookup(mode, pattern.as_usize());
             log::trace!(
                 "MATCHED: LexerMode: {:?}, LexerRule: {:?}, Pattern: {}, Buffer: {:?}, Buffer2: {:?}",
                 mode,
@@ -109,7 +112,6 @@ where
 {
     pub mode: D::LexerMode,
 
-    data: D,
     dfas: Vec<dense::DFA<&'static [u32]>>,
 
     input: I,
@@ -133,9 +135,9 @@ where
     D: LexerData,
     T: Token,
 {
-    pub fn try_new(input: I, data: D) -> Result<Self> {
+    pub fn try_new(input: I) -> Result<Self> {
         let mut dfas = Vec::new();
-        let dfa_bytes = data.dfa_bytes();
+        let dfa_bytes = D::dfa_bytes();
         let mut offset = 0;
         for _ in 0..D::LexerMode::COUNT {
             let (dfa, len) = dense::DFA::from_bytes(&dfa_bytes[offset..])?;
@@ -144,8 +146,7 @@ where
         }
 
         Ok(Self {
-            mode: data.start_mode(),
-            data,
+            mode: D::start_mode(),
             dfas,
             input,
             unread: Vec::new(),
@@ -356,15 +357,15 @@ mod tests {
         type LexerMode = XLexerMode;
         type LexerRule = XLexerRule;
 
-        fn start_mode(&self) -> Self::LexerMode {
+        fn start_mode() -> Self::LexerMode {
             XLexerMode
         }
-        fn dfa_bytes(&self) -> &'static [u8] {
+        fn dfa_bytes() -> &'static [u8] {
             &[]
         }
 
         #[inline]
-        fn lookup(&self, _mode: Self::LexerMode, _pattern_id: PatternID) -> Self::LexerRule {
+        fn lookup(_mode: Self::LexerMode, _pattern_id: usize) -> Self::LexerRule {
             XLexerRule
         }
     }
@@ -380,8 +381,8 @@ mod tests {
     where
         I: FusedIterator<Item = u8>,
     {
-        fn try_new(input: I, data: XLexerData) -> Result<Self> {
-            let mut ctx = LexerCtx::try_new(input, data)?;
+        fn try_new(input: I) -> Result<Self> {
+            let mut ctx = LexerCtx::try_new(input)?;
             ctx.end_flag = true;
             Ok(Self { ctx })
         }
@@ -415,7 +416,7 @@ mod tests {
     fn empty_lexer() {
         init_logger();
         let s = "hello";
-        let mut lexer = XLexer::try_new(s.bytes().fuse(), XLexerData {}).unwrap();
+        let mut lexer = XLexer::try_new(s.bytes().fuse()).unwrap();
         while let Some(t) = lexer.try_next().unwrap() {
             dbg!(t);
         }

@@ -25,7 +25,8 @@ fn calculate_minimum_unsigned_type(n: usize) -> &'static str {
 }
 
 /// Generate parser code from a grammar file into an output Rust file.
-pub fn generate<P: AsRef<Path>>(grammar_path: P, out_path: P) -> Result<()> {
+pub fn generate<P: AsRef<Path>>(grammar_path: P, output_dir: P, output_name: String) -> Result<()> {
+    let output_dir = output_dir.as_ref();
     let grammar = std::fs::read_to_string(&grammar_path)?;
     let mut context = LexContext::default();
     context.prod_labels.add("start");
@@ -63,7 +64,7 @@ pub fn generate<P: AsRef<Path>>(grammar_path: P, out_path: P) -> Result<()> {
         })
         .collect();
 
-    let mut out = std::fs::File::create(out_path)?;
+    let mut out = std::fs::File::create(output_dir.join(&output_name).with_extension("rs"))?;
 
     writeln!(out, "/*")?;
     writeln!(out, "Produced by parser generator ASLR")?;

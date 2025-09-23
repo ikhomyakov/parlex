@@ -39,15 +39,23 @@ static LEX_RULE_RE: Lazy<Regex> =
 static VAR_IN_REGEX_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}"#).unwrap());
 
+fn calculate_minimum_unsigned_type(n: usize) -> &'static str {
+    assert!(n <= u16::MAX as usize + 1);
+    if n <= (u8::MAX as usize) + 1 {
+        "u8"
+    } else {
+        "u16"
+    }
+}
+
 /// Generate lexer code from a spec file into an output Rust file.
-pub fn generate<P: AsRef<Path>>(
-    spec_path: P,
-    out_rs_path: P,
-    out_dfale_path: P,
-    out_dfabe_path: P,
-) -> Result<()> {
+pub fn generate<P: AsRef<Path>>(spec_path: P, output_dir: P, output_name: String) -> Result<()> {
+    let output_dir = output_dir.as_ref();
     let spec = std::fs::read_to_string(&spec_path)?;
-    let (rules, modes, _vars) = parse_alex(&spec)?;
+    let (rules, modes, _vars, start_mode) = parse_alex(&spec)?;
+    let Some(start_mode) = start_mode else {
+        bail!("Cannot determine start mode");
+    };
 
     let mut rule_vecs: HashMap<String, Vec<LRegex>> =
         modes.iter().cloned().map(|key| (key, Vec::new())).collect();
@@ -76,7 +84,7 @@ pub fn generate<P: AsRef<Path>>(
         }
     }
 
-    let mut out = std::fs::File::create(out_rs_path)?;
+    let mut out = std::fs::File::create(output_dir.join(&output_name).with_extension("rs"))?;
 
     writeln!(out, "/*")?;
     writeln!(out, "Produced by lexer generator ALEX")?;
@@ -86,28 +94,39 @@ pub fn generate<P: AsRef<Path>>(
     )?;
     writeln!(out, "*/\n")?;
     writeln!(out, "use include_bytes_aligned::include_bytes_aligned;")?;
+    writeln!(out, "use parlex::{{LexerMode, LexerRule, LexerData}};")?;
     writeln!(out, "")?;
 
     let mut modes: Vec<_> = modes.iter().filter(|&s| s != "*").collect();
     modes.sort();
 
-    writeln!(out, "pub const N_MODES: usize = {};", modes.len())?;
-    writeln!(out, "pub const N_RULES: usize = {};", rules.len() + 2)?;
-    writeln!(out, "")?;
-
+    writeln!(out, "#[derive(Debug, Clone, Copy, PartialEq)]")?;
     writeln!(
         out,
-        "#[derive(Debug, Clone, Copy, PartialEq)]\npub enum Mode {{"
+        "#[repr({})]",
+        calculate_minimum_unsigned_type(modes.len())
     )?;
+    writeln!(out, "pub enum Mode {{")?;
     for (i, m) in modes.iter().enumerate() {
         writeln!(out, "    {} = {},", m, i)?;
     }
     writeln!(out, "}}\n")?;
+    writeln!(out, "impl LexerMode for Mode {{")?;
+    writeln!(out, "    const COUNT: usize = {};", modes.len())?;
+    writeln!(out, "}}\n")?;
+    writeln!(out, "impl From<Mode> for usize {{")?;
+    writeln!(out, "    fn from(m: Mode) -> Self {{")?;
+    writeln!(out, "        m as usize")?;
+    writeln!(out, "    }}")?;
+    writeln!(out, "}}\n")?;
 
+    writeln!(out, "#[derive(Debug, Clone, Copy, PartialEq)]")?;
     writeln!(
         out,
-        "#[derive(Debug, Clone, Copy, PartialEq)]\npub enum Rule {{"
+        "#[repr({})]",
+        calculate_minimum_unsigned_type(rules.len() + 2)
     )?;
+    writeln!(out, "pub enum Rule {{")?;
     writeln!(out, "    Empty = 0,")?;
     for (i, r) in rules.iter().enumerate() {
         writeln!(
@@ -121,45 +140,56 @@ pub fn generate<P: AsRef<Path>>(
     }
     writeln!(out, "    End = {},", rules.len() + 1)?;
     writeln!(out, "}}\n")?;
+    writeln!(out, "impl LexerRule for Rule {{")?;
+    writeln!(out, "    const COUNT: usize = {};", rules.len() + 2)?;
+    writeln!(out, "    const END: Self = Self::End;")?;
+    writeln!(out, "}}\n")?;
+    writeln!(out, "impl From<Rule> for usize {{")?;
+    writeln!(out, "    fn from(r: Rule) -> Self {{")?;
+    writeln!(out, "        r as usize")?;
+    writeln!(out, "    }}")?;
+    writeln!(out, "}}\n")?;
 
     let max_mode_rules = rule_vecs.values().map(|v| v.len()).max().unwrap_or(0);
 
+    writeln!(out, "pub struct Data;")?;
+    writeln!(out, "impl Data {{")?;
+    writeln!(out, "    const START_MODE: Mode = Mode::{};\n", start_mode)?;
     writeln!(
         out,
-        "pub const TAB: [[Rule; {}]; {}] = [",
-        max_mode_rules,
-        modes.len()
+        "    const TAB: &'static [[Rule; {}]] = &'static [",
+        max_mode_rules
     )?;
+
     for (i, m) in modes.iter().enumerate() {
-        writeln!(out, "    /* MODE {} {:?} */ [", i, m)?;
+        writeln!(out, "        /* MODE {} {:?} */ [", i, m)?;
         let rules = rule_vecs.get(*m).ok_or(anyhow!("Missing mode {:?}", m))?;
         for (_j, r) in rules.iter().enumerate() {
-            writeln!(out, "        Rule::{},", r.label)?;
+            writeln!(out, "            Rule::{},", r.label)?;
         }
         for _ in rules.len()..max_mode_rules {
-            writeln!(out, "        Rule::Empty,")?;
+            writeln!(out, "            Rule::Empty,")?;
         }
-        writeln!(out, "    ],")?;
+        writeln!(out, "        ],")?;
     }
-    writeln!(out, "];\n")?;
+    writeln!(out, "    ];\n")?;
 
-    let mut file_le = std::fs::File::create(out_dfale_path)?;
-    let mut file_be = std::fs::File::create(out_dfabe_path)?;
+    let mut file_le = std::fs::File::create(output_dir.join(&output_name).with_extension("dfale"))?;
+    let mut file_be = std::fs::File::create(output_dir.join(&output_name).with_extension("dfabe"))?;
 
-    writeln!(out, "#[cfg(target_endian = \"little\")]")?;
+    writeln!(out, "    #[cfg(target_endian = \"little\")]")?;
     writeln!(
         out,
-        "pub static DFA_BYTES: &[u8] = include_bytes_aligned!(4, \"dfa.le.bin\");"
+        "    const DFA_BYTES: &[u8] = include_bytes_aligned!(4, \"dfa.le.bin\");"
     )?;
-    writeln!(out, "#[cfg(target_endian = \"big\")]")?;
+    writeln!(out, "    #[cfg(target_endian = \"big\")]")?;
     writeln!(
         out,
-        "pub static DFA_BYTES: &[u8] = include_bytes_aligned!(4, \"dfa.be.bin\");"
+        "    const DFA_BYTES: &[u8] = include_bytes_aligned!(4, \"dfa.be.bin\");\n"
     )?;
-    writeln!(out, "")?;
 
     let mut offset = 0;
-    writeln!(out, "pub const DFA_OFFSETS: [usize; {}] = [", modes.len())?;
+    writeln!(out, "    const DFA_OFFSETS: &'static [usize] = [")?;
 
     for (_i, m) in modes.iter().enumerate() {
         let rules = rule_vecs.get(*m).ok_or(anyhow!("Missing mode {:?}", m))?;
@@ -193,18 +223,48 @@ pub fn generate<P: AsRef<Path>>(
         assert!((bytes.len() - pad) % 4 == 0);
         file_be.write_all(&bytes[pad..])?;
 
-        writeln!(out, "    {}, // {}", offset, m)?;
+        writeln!(out, "        {}, // {}", offset, m)?;
         offset += bytes.len() - pad;
     }
-    writeln!(out, "];\n")?;
+    writeln!(out, "    ];")?;
+    writeln!(out, "}}\n")?;
+
+    writeln!(out, "impl LexerData for Data {{")?;
+    writeln!(out, "    type LexerMode = Mode;")?;
+    writeln!(out, "    type LexerRule = Rule;\n")?;
+    writeln!(out, "    fn start_mode() -> Self::LexerMode {{")?;
+    writeln!(out, "        Self::START_MODE")?;
+    writeln!(out, "    }}")?;
+    writeln!(out, "    fn dfa_bytes() -> &'static [u8] {{")?;
+    writeln!(out, "        Self::DFA_BYTES")?;
+    writeln!(out, "    }}")?;
+    writeln!(out, "    fn dfa_offsets() -> &'static [usize] {{")?;
+    writeln!(out, "        Self::DFA_OFFSETS")?;
+    writeln!(out, "    }}")?;
+    writeln!(
+        out,
+        "    fn lookup(mode: Self::LexerMode, pattern_id: usize) -> Self::LexerRule {{"
+    )?;
+    writeln!(out, "        let m: usize = mode.into();")?;
+    writeln!(out, "        Self::TAB[m][pattern_id]")?;
+    writeln!(out, "    }}")?;
+    writeln!(out, "}}\n")?;
 
     Ok(())
 }
 
-fn parse_alex(input: &str) -> Result<(Vec<LexRule>, HashSet<String>, HashMap<String, String>)> {
+fn parse_alex(
+    input: &str,
+) -> Result<(
+    Vec<LexRule>,
+    HashSet<String>,
+    HashMap<String, String>,
+    Option<String>,
+)> {
     let mut rules: Vec<LexRule> = Vec::new();
     let mut modes: HashSet<String> = HashSet::new();
     let mut vars: HashMap<String, String> = HashMap::new();
+    let mut start_mode: Option<String> = None;
 
     for (i, raw_line) in input.lines().enumerate() {
         let line_no = i + 1;
@@ -232,6 +292,10 @@ fn parse_alex(input: &str) -> Result<(Vec<LexRule>, HashSet<String>, HashMap<Str
                 .filter(|s| !s.is_empty())
                 .collect();
 
+            if start_mode.is_none() && !rule_modes.is_empty() {
+                start_mode = Some(rule_modes[0].clone());
+            }
+
             modes.extend(rule_modes.iter().cloned());
 
             if rule_modes.is_empty() {
@@ -250,7 +314,7 @@ fn parse_alex(input: &str) -> Result<(Vec<LexRule>, HashSet<String>, HashMap<Str
         bail!("Unrecognized line ({}): {:?}", line_no, line);
     }
 
-    Ok((rules, modes, vars))
+    Ok((rules, modes, vars, start_mode))
 }
 
 fn expand_vars(input: &str, vars: &HashMap<String, String>) -> Result<String> {
@@ -321,9 +385,11 @@ Expr7: <Expr> (?-u:\[)
 
 "#;
 
-        let (rules, modes, vars) = parse_alex(input).unwrap();
+        let (rules, modes, vars, start_mode) = parse_alex(input).unwrap();
         assert!(vars.contains_key("SPACE"));
         assert_eq!(rules.len(), 10);
+        assert_eq!(modes.len(), 2);
+        assert_eq!(start_mode.as_deref(), Some("Expr"));
 
         let r = rules.iter().find(|r| r.label == "Expr3").unwrap();
         assert!(r.regex.starts_with("(?:"));

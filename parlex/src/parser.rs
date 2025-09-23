@@ -48,16 +48,14 @@ pub trait ParserData {
     type TokenID: ParserTokenID;
     type ProdID: ParserProdID;
 
-    fn start_state(&self) -> Self::StateID;
+    fn start_state() -> Self::StateID;
 
     fn lookup(
-        &self,
         state_id: Self::StateID,
         token_id: Self::TokenID,
     ) -> ParserAction<Self::StateID, Self::ProdID, Self::AmbigID>;
 
     fn lookup_ambig(
-        &self,
         ambig_id: Self::AmbigID,
     ) -> [ParserAction<Self::StateID, Self::ProdID, Self::AmbigID>; 2];
 }
@@ -96,13 +94,13 @@ pub trait Parser {
                 return Ok(None);
             }
         };
-        let mut state = self.ctx().data.start_state();
+        let mut state = <Self as Parser>::ParserData::start_state();
         self.ctx_mut().states.push(state);
         if log::log_enabled!(log::Level::Trace) {
             self.ctx().dump_state(&token);
         }
         loop {
-            let action = match self.ctx().data.lookup(state, token.token_id()) {
+            let action = match <Self as Parser>::ParserData::lookup(state, token.token_id()) {
                 Action::<Self>::Ambig(ambig) => {
                     log::trace!("Ambig {:?}", ambig);
                     let action = self.resolve_ambiguity(ambig, &mut token)?;
@@ -131,7 +129,8 @@ pub trait Parser {
                     self.reduce(prod_id, &token)?;
                     state = self.ctx().states[self.ctx().states.len() - 1];
                     let lhs_id = self.ctx().tokens[self.ctx().tokens.len() - 1].token_id();
-                    let Action::<Self>::Goto(new_state) = self.ctx().data.lookup(state, lhs_id)
+                    let Action::<Self>::Goto(new_state) =
+                        <Self as Parser>::ParserData::lookup(state, lhs_id)
                     else {
                         bail!("expected Action::Goto");
                     };
@@ -175,7 +174,6 @@ where
     D: ParserData,
 {
     pub lexer: L,
-    data: D,
     pub tokens: Vec<L::Token>,
     pub states: Vec<D::StateID>,
     pub stats: ParserStats,
@@ -186,9 +184,8 @@ where
     L: Lexer,
     D: ParserData,
 {
-    pub fn new(lexer: L, data: D) -> Self {
+    pub fn new(lexer: L) -> Self {
         Self {
-            data,
             lexer,
             tokens: Vec::new(),
             states: Vec::new(),
@@ -360,20 +357,18 @@ mod tests {
         type LexerMode = XLexerMode;
         type LexerRule = XLexerRule;
 
-        fn start_mode(&self) -> Self::LexerMode {
+        fn start_mode() -> Self::LexerMode {
             XLexerMode
         }
-        fn dfa_bytes(&self) -> &'static [u8] {
+        fn dfa_bytes() -> &'static [u8] {
             &[]
         }
 
         #[inline]
-        fn lookup(&self, _mode: Self::LexerMode, _pattern_id: PatternID) -> Self::LexerRule {
+        fn lookup(_mode: Self::LexerMode, _pattern_id: usize) -> Self::LexerRule {
             XLexerRule
         }
     }
-
-    const X_LEXER_DATA: XLexerData = XLexerData {};
 
     struct XLexer<I>
     where
@@ -387,7 +382,7 @@ mod tests {
         I: FusedIterator<Item = u8>,
     {
         fn try_new(input: I) -> Result<Self> {
-            let mut ctx = LexerCtx::try_new(input, X_LEXER_DATA)?;
+            let mut ctx = LexerCtx::try_new(input)?;
             ctx.end_flag = true;
             Ok(Self { ctx })
         }
@@ -424,12 +419,11 @@ mod tests {
         type TokenID = TokenID;
         type ProdID = ProdID;
 
-        fn start_state(&self) -> Self::StateID {
+        fn start_state() -> Self::StateID {
             StateID::default()
         }
 
         fn lookup(
-            &self,
             state_id: Self::StateID,
             token_id: Self::TokenID,
         ) -> ParserAction<Self::StateID, Self::ProdID, Self::AmbigID> {
@@ -437,7 +431,6 @@ mod tests {
         }
 
         fn lookup_ambig(
-            &self,
             ambig_id: Self::AmbigID,
         ) -> [ParserAction<Self::StateID, Self::ProdID, Self::AmbigID>; 2] {
             [
@@ -446,8 +439,6 @@ mod tests {
             ]
         }
     }
-
-    const X_PARSER_DATA: XParserData = XParserData {};
 
     struct XParser<I>
     where
@@ -462,7 +453,7 @@ mod tests {
     {
         fn try_new(input: I) -> Result<Self> {
             let lexer = XLexer::try_new(input)?;
-            let ctx = ParserCtx::new(lexer, X_PARSER_DATA);
+            let ctx = ParserCtx::new(lexer);
             Ok(Self { ctx })
         }
     }

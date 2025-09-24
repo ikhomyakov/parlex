@@ -18,11 +18,15 @@ mod real {
         /// Prefix used to construct output file names.
         #[arg(short = 'n', long)]
         name: String,
+
+        /// Enable debug logging (off by default).
+        #[arg(short = 'd', long)]
+        debug: bool,
     }
 
     pub fn main() -> anyhow::Result<()> {
         let args = Args::parse();
-        alex::generate(args.spec, args.output_dir, args.name)
+        alex::generate(args.spec, args.output_dir, args.name, args.debug)
     }
 }
 

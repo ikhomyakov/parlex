@@ -310,6 +310,16 @@ impl Act {
     pub fn new(typ: ActTyp, val: usize) -> Self {
         Act { typ, val }
     }
+    pub fn val_to_string(&self, prod_enums: &[String]) -> Option<String> {
+        match self.typ {
+            ActTyp::_Error => None,
+            ActTyp::Accept => None,
+            ActTyp::Shift => Some(format!("StateID({})", self.val)),
+            ActTyp::Reduce => Some(format!("ProdID::{}", prod_enums[self.val])),
+            ActTyp::_Ambig => Some(format!("AmbigID({})", self.val)),
+            ActTyp::Goto => Some(format!("StateID({})", self.val)),
+        }
+    }
 }
 
 /// SLR(1) parse table: rows states, cols tokens

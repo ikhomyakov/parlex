@@ -4,18 +4,18 @@ use smartstring::alias::String;
 use std::fmt::Debug;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ParserAction<US, UP, UA>
+pub enum ParserAction<S, P, A>
 where
-    US: ParserStateID,
-    UP: ParserProdID,
-    UA: ParserAmbigID,
+    S: ParserStateID,
+    P: ParserProdID,
+    A: ParserAmbigID,
 {
     Error,
     Accept,
-    Shift(US),
-    Reduce(UP),
-    Ambig(UA),
-    Goto(US),
+    Shift(S),
+    Reduce(P),
+    Ambig(A),
+    Goto(S),
 }
 
 pub trait ParserStateID: Copy + Debug + Eq + Into<usize> {
@@ -27,13 +27,21 @@ pub trait ParserAmbigID: Copy + Debug + Eq + Into<usize> {
 }
 
 pub trait ParserProdID: Copy + Debug + Eq + Into<usize> {
+    type TokenID: ParserTokenID;
+
     const COUNT: usize;
+
+    fn label(&self) -> &'static str;
+    fn lhs(&self) -> Self::TokenID;
+    fn size(&self) -> usize;
 }
 
 pub trait ParserTokenID: Copy + Debug + Eq + Into<usize> {
     const COUNT_NONTERMINALS: usize;
     const COUNT_TERMINALS: usize;
     const COUNT: usize;
+
+    fn label(&self) -> &'static str;
 }
 
 type Action<P> = ParserAction<
@@ -124,8 +132,7 @@ pub trait Parser {
                 }
 
                 Action::<Self>::Reduce(prod_id) => {
-                    let prod_id_idx: usize = prod_id.into();
-                    log::trace!("Reduce {:?}({})", prod_id, prod_id_idx);
+                    log::trace!("Reduce {:?}({})", prod_id, Into::<usize>::into(prod_id));
                     self.reduce(prod_id, &token)?;
                     state = self.ctx().states[self.ctx().states.len() - 1];
                     let lhs_id = self.ctx().tokens[self.ctx().tokens.len() - 1].token_id();
@@ -295,6 +302,10 @@ mod tests {
         const COUNT_NONTERMINALS: usize = 5;
         const COUNT_TERMINALS: usize = 10;
         const COUNT: usize = 15;
+
+        fn label(&self) -> &'static str {
+            ""
+        }
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -320,7 +331,19 @@ mod tests {
     }
 
     impl ParserProdID for ProdID {
+        type TokenID = TokenID;
+
         const COUNT: usize = 24;
+
+        fn label(&self) -> &'static str {
+            ""
+        }
+        fn lhs(&self) -> Self::TokenID {
+            TokenID(0)
+        }
+        fn size(&self) -> usize {
+            0
+        }
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]

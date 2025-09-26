@@ -32,7 +32,7 @@ pub trait ParserProdID: Copy + Debug + Eq + Into<usize> {
     const COUNT: usize;
 
     fn label(&self) -> &'static str;
-    fn lhs(&self) -> Self::TokenID;
+    fn lhs_token_id(&self) -> Self::TokenID;
     fn size(&self) -> usize;
 }
 
@@ -44,10 +44,10 @@ pub trait ParserTokenID: Copy + Debug + Eq + Into<usize> {
     fn label(&self) -> &'static str;
 }
 
-type Action<P> = ParserAction<
-    <<P as Parser>::ParserData as ParserData>::StateID,
-    <<P as Parser>::ParserData as ParserData>::ProdID,
-    <<P as Parser>::ParserData as ParserData>::AmbigID,
+type Action<P, U> = ParserAction<
+    <<P as Parser<U>>::ParserData as ParserData>::StateID,
+    <<P as Parser<U>>::ParserData as ParserData>::ProdID,
+    <<P as Parser<U>>::ParserData as ParserData>::AmbigID,
 >;
 
 pub trait ParserData {
@@ -65,79 +65,156 @@ pub trait ParserData {
 
     fn lookup_ambig(
         ambig_id: Self::AmbigID,
-    ) -> [ParserAction<Self::StateID, Self::ProdID, Self::AmbigID>; 2];
+    ) -> &'static [ParserAction<Self::StateID, Self::ProdID, Self::AmbigID>; 2];
 }
 
-pub trait Parser {
-    type Lexer: Lexer<Token: Token<TokenID = <Self::ParserData as ParserData>::TokenID>>;
+pub trait Parser<U> {
+    type Lexer: Lexer<U, Token: Token<TokenID = <Self::ParserData as ParserData>::TokenID>>;
     type ParserData: ParserData;
 
-    fn ctx(&self) -> &ParserCtx<Self::Lexer, Self::ParserData>;
-    fn ctx_mut(&mut self) -> &mut ParserCtx<Self::Lexer, Self::ParserData>;
+    fn ctx(&self) -> &ParserCtx<Self::Lexer, Self::ParserData, U>;
+    fn ctx_mut(&mut self) -> &mut ParserCtx<Self::Lexer, Self::ParserData, U>;
 
     fn resolve_ambiguity(
         &mut self,
+        user_data: &mut U,
         ambig: <Self::ParserData as ParserData>::AmbigID,
-        tok2: &<Self::Lexer as Lexer>::Token,
-    ) -> Result<Action<Self>>;
+        tok2: &<Self::Lexer as Lexer<U>>::Token,
+    ) -> Result<Action<Self, U>>;
 
     fn reduce(
         &mut self,
+        user_data: &mut U,
         prod_id: <Self::ParserData as ParserData>::ProdID,
-        token: &<Self::Lexer as Lexer>::Token,
+        token: &<Self::Lexer as Lexer<U>>::Token,
     ) -> Result<()>;
 
     fn stats(&self) -> ParserStats {
         self.ctx().stats.clone()
     }
 
+    /// Returns a reference to the token counted from the end:
+    /// 0 = last, 1 = second last, etc.  
+    /// Panics if `index` ≥ number of tokens.
     #[inline]
-    fn try_next(&mut self) -> Result<Option<<Self::Lexer as Lexer>::Token>> {
+    fn tokens_peek<'a>(&'a self, index: usize) -> &'a <Self::Lexer as Lexer<U>>::Token
+    where
+        U: 'a,
+    {
+        let n = self.ctx().tokens.len();
+        &self.ctx().tokens[n - 1 - index]
+    }
+
+    /// Returns a mutable reference to the token counted from the end:
+    /// 0 = last, 1 = second last, etc.  
+    /// Panics if `index` ≥ number of tokens.
+    #[inline]
+    fn tokens_mut_peek<'a>(&'a mut self, index: usize) -> &'a mut <Self::Lexer as Lexer<U>>::Token
+    where
+        U: 'a,
+    {
+        let n = self.ctx().tokens.len();
+        &mut self.ctx_mut().tokens[n - 1 - index]
+    }
+
+    #[inline]
+    fn tokens_pop(&mut self) -> Result<<Self::Lexer as Lexer<U>>::Token> {
+        self.ctx_mut()
+            .tokens
+            .pop()
+            .ok_or_else(|| anyhow!("stack underflow"))
+    }
+
+    #[inline]
+    fn tokens_push(&mut self, token: <Self::Lexer as Lexer<U>>::Token) {
+        self.ctx_mut().tokens.push(token);
+    }
+
+    fn dump_state(&self, incoming: &<Self::Lexer as Lexer<U>>::Token) {
+        let mut output = String::new();
+        if !self.ctx().states.is_empty() {
+            for (i, (token, state)) in self
+                .ctx()
+                .tokens
+                .iter()
+                .chain(std::iter::once(incoming))
+                .zip(self.ctx().states.iter())
+                .enumerate()
+            {
+                output.push_str(&format!(
+                    "<{:?}>  {}{:?}  ",
+                    state,
+                    if i == self.ctx().states.len() - 1 {
+                        "<-  "
+                    } else {
+                        ""
+                    },
+                    token,
+                ));
+            }
+            log::trace!("{}", output);
+        } else {
+            log::trace!("<>");
+        }
+    }
+
+    fn try_collect(&mut self, user_data: &mut U) -> Result<Vec<<Self::Lexer as Lexer<U>>::Token>> {
+        let mut ts = Vec::new();
+        while let Some(t) = self.try_next(user_data)? {
+            ts.push(t);
+        }
+        Ok(ts)
+    }
+
+    #[inline]
+    fn try_next(&mut self, user_data: &mut U) -> Result<Option<<Self::Lexer as Lexer<U>>::Token>> {
         self.ctx_mut().states.clear();
         self.ctx_mut().tokens.clear();
         self.ctx_mut().stats.tokens += 1;
-        let mut token = match self.ctx_mut().lexer.try_next()? {
+        let mut token = match self.ctx_mut().lexer.try_next(user_data)? {
             Some(t) => t,
             None => {
                 return Ok(None);
             }
         };
-        let mut state = <Self as Parser>::ParserData::start_state();
+        let mut state = <Self as Parser<U>>::ParserData::start_state();
         self.ctx_mut().states.push(state);
         if log::log_enabled!(log::Level::Trace) {
-            self.ctx().dump_state(&token);
+            self.dump_state(&token);
         }
         loop {
-            let action = match <Self as Parser>::ParserData::lookup(state, token.token_id()) {
-                Action::<Self>::Ambig(ambig) => {
+            let action = match <Self as Parser<U>>::ParserData::lookup(state, token.token_id()) {
+                Action::<Self, U>::Ambig(ambig) => {
                     log::trace!("Ambig {:?}", ambig);
-                    let action = self.resolve_ambiguity(ambig, &mut token)?;
+                    let action = self.resolve_ambiguity(user_data, ambig, &mut token)?;
                     self.ctx_mut().stats.ambigs += 1;
                     action
                 }
                 action => action,
             };
             match action {
-                Action::<Self>::Shift(new_state) => {
+                Action::<Self, U>::Shift(new_state) => {
                     log::trace!("Shift {:?}", new_state);
                     self.ctx_mut().tokens.push(token);
                     state = new_state;
                     self.ctx_mut().states.push(state);
                     self.ctx_mut().stats.tokens += 1;
-                    token = match self.ctx_mut().lexer.try_next()? {
+                    token = match self.ctx_mut().lexer.try_next(user_data)? {
                         Some(t) => t,
                         None => bail!("unexpected end of stream"),
                     };
                     self.ctx_mut().stats.shifts += 1;
                 }
 
-                Action::<Self>::Reduce(prod_id) => {
-                    log::trace!("Reduce {:?}({})", prod_id, Into::<usize>::into(prod_id));
-                    self.reduce(prod_id, &token)?;
+                Action::<Self, U>::Reduce(prod) => {
+                    log::trace!("Reduce {:?}({})", prod, Into::<usize>::into(prod));
+                    self.reduce(user_data, prod, &token)?;
+                    let n = self.ctx().states.len() - prod.size();
+                    self.ctx_mut().states.truncate(n);
                     state = self.ctx().states[self.ctx().states.len() - 1];
                     let lhs_id = self.ctx().tokens[self.ctx().tokens.len() - 1].token_id();
-                    let Action::<Self>::Goto(new_state) =
-                        <Self as Parser>::ParserData::lookup(state, lhs_id)
+                    let Action::<Self, U>::Goto(new_state) =
+                        <Self as Parser<U>>::ParserData::lookup(state, lhs_id)
                     else {
                         bail!("expected Action::Goto");
                     };
@@ -146,22 +223,22 @@ pub trait Parser {
                     self.ctx_mut().stats.reductions += 1;
                 }
 
-                Action::<Self>::Accept => {
+                Action::<Self, U>::Accept => {
                     log::trace!("Accept");
                     assert!(self.ctx().tokens.len() == 1);
-                    let token = self.ctx_mut().tokens_pop()?;
+                    let token = self.tokens_pop()?;
                     return Ok(Some(token));
                 }
 
-                Action::<Self>::Error => {
+                Action::<Self, U>::Error => {
                     bail!("Error on token {:?}", token)
                 }
 
-                Action::<Self>::Ambig(_) | Action::<Self>::Goto(_) => unreachable!(),
+                Action::<Self, U>::Ambig(_) | Action::<Self, U>::Goto(_) => unreachable!(),
             }
 
             if log::log_enabled!(log::Level::Trace) {
-                self.ctx().dump_state(&token);
+                self.dump_state(&token);
             }
         }
     }
@@ -175,9 +252,9 @@ pub struct ParserStats {
     pub ambigs: usize,
 }
 
-pub struct ParserCtx<L, D>
+pub struct ParserCtx<L, D, U>
 where
-    L: Lexer,
+    L: Lexer<U>,
     D: ParserData,
 {
     pub lexer: L,
@@ -186,9 +263,9 @@ where
     pub stats: ParserStats,
 }
 
-impl<L, D> ParserCtx<L, D>
+impl<L, D, U> ParserCtx<L, D, U>
 where
-    L: Lexer,
+    L: Lexer<U>,
     D: ParserData,
 {
     pub fn new(lexer: L) -> Self {
@@ -197,53 +274,6 @@ where
             tokens: Vec::new(),
             states: Vec::new(),
             stats: ParserStats::default(),
-        }
-    }
-
-    /// Returns a reference to the token counted from the end:
-    /// 0 = last, 1 = second last, etc.  
-    /// Panics if `index` ≥ number of tokens.
-    pub fn tokens_peek(&self, index: usize) -> &L::Token {
-        let n = self.tokens.len();
-        &self.tokens[n - 1 - index]
-    }
-
-    /// Returns a mutable reference to the token counted from the end:
-    /// 0 = last, 1 = second last, etc.  
-    /// Panics if `index` ≥ number of tokens.
-    pub fn tokens_mut_peek(&mut self, index: usize) -> &mut L::Token {
-        let n = self.tokens.len();
-        &mut self.tokens[n - 1 - index]
-    }
-
-    pub fn tokens_pop(&mut self) -> Result<L::Token> {
-        self.tokens.pop().ok_or_else(|| anyhow!("stack underflow"))
-    }
-
-    pub fn dump_state(&self, incoming: &L::Token) {
-        let mut output = String::new();
-        if !self.states.is_empty() {
-            for (i, (token, state)) in self
-                .tokens
-                .iter()
-                .chain(std::iter::once(incoming))
-                .zip(self.states.iter())
-                .enumerate()
-            {
-                output.push_str(&format!(
-                    "<{:?}>  {}{:?}  ",
-                    state,
-                    if i == self.states.len() - 1 {
-                        "<-  "
-                    } else {
-                        ""
-                    },
-                    token,
-                ));
-            }
-            log::trace!("{}", output);
-        } else {
-            log::trace!("<>");
         }
     }
 }
@@ -289,7 +319,7 @@ mod tests {
         }
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
     struct TokenID(usize);
 
     impl From<TokenID> for usize {
@@ -338,7 +368,7 @@ mod tests {
         fn label(&self) -> &'static str {
             ""
         }
-        fn lhs(&self) -> Self::TokenID {
+        fn lhs_token_id(&self) -> Self::TokenID {
             TokenID(0)
         }
         fn size(&self) -> usize {
@@ -359,7 +389,7 @@ mod tests {
         const COUNT: usize = 1500;
     }
 
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, Default)]
     struct XToken {
         token_id: TokenID,
         line_no: usize,
@@ -397,7 +427,7 @@ mod tests {
     where
         I: FusedIterator<Item = u8>,
     {
-        ctx: LexerCtx<I, <Self as Lexer>::LexerData, <Self as Lexer>::Token>,
+        ctx: LexerCtx<I, <Self as Lexer<()>>::LexerData, <Self as Lexer<()>>::Token>,
     }
 
     impl<I> XLexer<I>
@@ -411,7 +441,7 @@ mod tests {
         }
     }
 
-    impl<I> Lexer for XLexer<I>
+    impl<I> Lexer<()> for XLexer<I>
     where
         I: FusedIterator<Item = u8>,
     {
@@ -426,14 +456,23 @@ mod tests {
             &mut self.ctx
         }
 
-        fn action(&mut self, _rule: <Self::LexerData as LexerData>::LexerRule) -> Result<()> {
-            self.ctx_mut().yield_token(XToken {
+        fn action(
+            &mut self,
+            user_data: &mut (),
+            _rule: <Self::LexerData as LexerData>::LexerRule,
+        ) -> Result<()> {
+            self.yield_token(XToken {
                 token_id: TokenID(0),
                 line_no: 0,
             });
             Ok(())
         }
     }
+
+    const AMBIG: &'static [ParserAction<StateID, ProdID, AmbigID>; 2] = &[
+        ParserAction::Shift(StateID(0)),
+        ParserAction::Reduce(ProdID(0)),
+    ];
 
     struct XParserData {}
     impl ParserData for XParserData {
@@ -455,11 +494,8 @@ mod tests {
 
         fn lookup_ambig(
             ambig_id: Self::AmbigID,
-        ) -> [ParserAction<Self::StateID, Self::ProdID, Self::AmbigID>; 2] {
-            [
-                ParserAction::Shift(StateID::default()),
-                ParserAction::Reduce(ProdID(0)),
-            ]
+        ) -> &'static [ParserAction<Self::StateID, Self::ProdID, Self::AmbigID>; 2] {
+            AMBIG
         }
     }
 
@@ -467,7 +503,7 @@ mod tests {
     where
         I: FusedIterator<Item = u8>,
     {
-        ctx: ParserCtx<XLexer<I>, <Self as Parser>::ParserData>,
+        ctx: ParserCtx<XLexer<I>, <Self as Parser<()>>::ParserData, ()>,
     }
 
     impl<I> XParser<I>
@@ -481,32 +517,34 @@ mod tests {
         }
     }
 
-    impl<I> Parser for XParser<I>
+    impl<I> Parser<()> for XParser<I>
     where
         I: FusedIterator<Item = u8>,
     {
         type Lexer = XLexer<I>;
         type ParserData = XParserData;
 
-        fn ctx(&self) -> &ParserCtx<Self::Lexer, Self::ParserData> {
+        fn ctx(&self) -> &ParserCtx<Self::Lexer, Self::ParserData, ()> {
             &self.ctx
         }
-        fn ctx_mut(&mut self) -> &mut ParserCtx<Self::Lexer, Self::ParserData> {
+        fn ctx_mut(&mut self) -> &mut ParserCtx<Self::Lexer, Self::ParserData, ()> {
             &mut self.ctx
         }
 
         fn resolve_ambiguity(
             &mut self,
+            user_data: &mut (),
             ambig: <Self::ParserData as ParserData>::AmbigID,
-            tok2: &<Self::Lexer as Lexer>::Token,
-        ) -> Result<Action<Self>> {
-            Ok(Action::<Self>::Shift(StateID::default()))
+            tok2: &<Self::Lexer as Lexer<()>>::Token,
+        ) -> Result<Action<Self, ()>> {
+            Ok(Action::<Self, ()>::Shift(StateID::default()))
         }
 
         fn reduce(
             &mut self,
+            user_data: &mut (),
             prod_id: <Self::ParserData as ParserData>::ProdID,
-            token: &<Self::Lexer as Lexer>::Token,
+            token: &<Self::Lexer as Lexer<()>>::Token,
         ) -> Result<()> {
             Ok(())
         }
@@ -517,7 +555,7 @@ mod tests {
         init_logger();
         let s = "hello";
         let mut parser = XParser::try_new(s.bytes().fuse()).unwrap();
-        while let Some(t) = parser.try_next().unwrap() {
+        while let Some(t) = parser.try_next(&mut ()).unwrap() {
             dbg!(t);
         }
     }

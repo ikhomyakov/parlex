@@ -10,7 +10,7 @@ use std::fmt::Debug;
 use std::iter::FusedIterator;
 use std::mem;
 
-pub trait Token: Copy + Debug {
+pub trait Token: Clone + Debug {
     type TokenID: Into<usize>;
 
     fn token_id(&self) -> Self::TokenID;
@@ -39,7 +39,7 @@ pub trait LexerData {
     fn lookup(mode: Self::LexerMode, pattern_id: usize) -> Self::LexerRule;
 }
 
-pub trait Lexer {
+pub trait Lexer<U> {
     type Input: FusedIterator<Item = u8>;
     type LexerData: LexerData;
     type Token: Token;
@@ -47,14 +47,26 @@ pub trait Lexer {
     fn ctx(&self) -> &LexerCtx<Self::Input, Self::LexerData, Self::Token>;
     fn ctx_mut(&mut self) -> &mut LexerCtx<Self::Input, Self::LexerData, Self::Token>;
 
-    fn action(&mut self, rule: <Self::LexerData as LexerData>::LexerRule) -> Result<()>;
+    fn action(
+        &mut self,
+        user_data: &mut U,
+        rule: <Self::LexerData as LexerData>::LexerRule,
+    ) -> Result<()>;
 
     fn stats(&self) -> LexerStats {
         self.ctx().stats.clone()
     }
 
+    fn try_collect(&mut self, user_data: &mut U) -> Result<Vec<Self::Token>> {
+        let mut ts = Vec::new();
+        while let Some(t) = self.try_next(user_data)? {
+            ts.push(t);
+        }
+        Ok(ts)
+    }
+
     #[inline]
-    fn try_next(&mut self) -> Result<Option<Self::Token>> {
+    fn try_next(&mut self, user_data: &mut U) -> Result<Option<Self::Token>> {
         if let Some(t) = self.ctx_mut().tokens.pop_front() {
             return Ok(Some(t));
         }
@@ -65,7 +77,7 @@ pub trait Lexer {
 
         while let Some(pattern) = self.ctx_mut().try_match()? {
             let mode = self.ctx().mode;
-            let rule = <Self as Lexer>::LexerData::lookup(mode, pattern.as_usize());
+            let rule = <Self as Lexer<U>>::LexerData::lookup(mode, pattern.as_usize());
             log::trace!(
                 "MATCHED: LexerMode: {:?}, LexerRule: {:?}, Pattern: {}, Buffer: {:?}, Buffer2: {:?}",
                 mode,
@@ -81,7 +93,7 @@ pub trait Lexer {
                 },
             );
 
-            self.action(rule)?;
+            self.action(user_data, rule)?;
 
             if let Some(t) = self.ctx_mut().tokens.pop_front() {
                 return Ok(Some(t));
@@ -89,13 +101,61 @@ pub trait Lexer {
         }
         self.ctx_mut().end_flag = true;
 
-        self.action(<Self::LexerData as LexerData>::LexerRule::END)?;
+        self.action(user_data, <Self::LexerData as LexerData>::LexerRule::END)?;
 
         if let Some(t) = self.ctx_mut().tokens.pop_front() {
             return Ok(Some(t));
         } else {
             return Ok(None);
         }
+    }
+
+    #[inline]
+    fn accum(&mut self) {
+        self.ctx_mut().accum_flag = true;
+    }
+
+    #[inline]
+    fn begin(&mut self, mode: <Self::LexerData as LexerData>::LexerMode) {
+        self.ctx_mut().mode = mode;
+    }
+
+    #[inline]
+    fn yield_token(&mut self, token: Self::Token) {
+        self.ctx_mut().tokens.push_back(token);
+    }
+
+    #[inline]
+    fn clear(&mut self) {
+        self.ctx_mut().accum_flag = false;
+        self.ctx_mut().buffer.clear();
+    }
+
+    #[inline]
+    fn take_bytes(&mut self) -> Vec<u8> {
+        self.ctx_mut().accum_flag = false;
+        mem::take(&mut self.ctx_mut().buffer)
+    }
+
+    #[inline]
+    fn take_bytes2(&mut self) -> Vec<u8> {
+        self.ctx_mut().accum_flag = false;
+        self.ctx_mut().buffer.clear();
+        mem::take(&mut self.ctx_mut().buffer2)
+    }
+
+    #[inline]
+    fn take_str(&mut self) -> Result<String> {
+        let bytes = self.take_bytes();
+        let s = std::string::String::from_utf8(bytes)?;
+        Ok(s.into())
+    }
+
+    #[inline]
+    fn take_str2(&mut self) -> Result<String> {
+        let bytes = self.take_bytes2();
+        let s = std::string::String::from_utf8(bytes)?;
+        Ok(s.into())
     }
 }
 
@@ -263,46 +323,6 @@ where
             }
         }
     }
-
-    pub fn accum(&mut self) {
-        self.accum_flag = true;
-    }
-
-    pub fn begin(&mut self, mode: D::LexerMode) {
-        self.mode = mode;
-    }
-
-    pub fn yield_token(&mut self, token: T) {
-        self.tokens.push_back(token);
-    }
-
-    pub fn clear(&mut self) {
-        self.accum_flag = false;
-        self.buffer.clear();
-    }
-
-    pub fn take_bytes(&mut self) -> Vec<u8> {
-        self.accum_flag = false;
-        mem::take(&mut self.buffer)
-    }
-
-    pub fn take_bytes2(&mut self) -> Vec<u8> {
-        self.accum_flag = false;
-        self.buffer.clear();
-        mem::take(&mut self.buffer2)
-    }
-
-    pub fn take_str(&mut self) -> Result<String> {
-        let bytes = self.take_bytes();
-        let s = std::string::String::from_utf8(bytes)?;
-        Ok(s.into())
-    }
-
-    pub fn take_str2(&mut self) -> Result<String> {
-        let bytes = self.take_bytes2();
-        let s = std::string::String::from_utf8(bytes)?;
-        Ok(s.into())
-    }
 }
 
 #[cfg(test)]
@@ -336,7 +356,7 @@ mod tests {
         }
     }
 
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, Default)]
     struct XToken {
         token_id: usize,
         line_no: usize,
@@ -374,7 +394,7 @@ mod tests {
     where
         I: FusedIterator<Item = u8>,
     {
-        ctx: LexerCtx<I, <Self as Lexer>::LexerData, <Self as Lexer>::Token>,
+        ctx: LexerCtx<I, <Self as Lexer<()>>::LexerData, <Self as Lexer<()>>::Token>,
     }
 
     impl<I> XLexer<I>
@@ -388,7 +408,7 @@ mod tests {
         }
     }
 
-    impl<I> Lexer for XLexer<I>
+    impl<I> Lexer<()> for XLexer<I>
     where
         I: FusedIterator<Item = u8>,
     {
@@ -403,8 +423,12 @@ mod tests {
             &mut self.ctx
         }
 
-        fn action(&mut self, _rule: <Self::LexerData as LexerData>::LexerRule) -> Result<()> {
-            self.ctx_mut().yield_token(XToken {
+        fn action(
+            &mut self,
+            _user_data: &mut (),
+            _rule: <Self::LexerData as LexerData>::LexerRule,
+        ) -> Result<()> {
+            self.yield_token(XToken {
                 token_id: 0,
                 line_no: 0,
             });
@@ -417,7 +441,7 @@ mod tests {
         init_logger();
         let s = "hello";
         let mut lexer = XLexer::try_new(s.bytes().fuse()).unwrap();
-        while let Some(t) = lexer.try_next().unwrap() {
+        while let Some(t) = lexer.try_next(&mut ()).unwrap() {
             dbg!(t);
         }
     }

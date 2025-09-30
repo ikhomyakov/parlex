@@ -314,7 +314,7 @@ impl OperDefs {
         }
 
         let rename_to = match rename_to.view(arena)? {
-            View::Atom(rename_to) if rename_to == "none" => None,
+            View::Atom("none") => None,
             View::Func(ar, _, _) => {
                 let (_, [rename_to]) = rename_to.unpack_func(ar, &["some"])?;
                 Some(rename_to)
@@ -361,7 +361,7 @@ impl OperDefs {
         let tab = self
             .map
             .entry(String::from(name))
-            .or_insert_with(|| OperDefTab::new());
+            .or_insert_with(OperDefTab::new);
 
         if matches!(fixity, Fixity::Fun) && tab.is_oper() {
             bail!(

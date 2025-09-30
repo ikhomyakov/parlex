@@ -79,7 +79,7 @@ fn parse_date_to_epoch(s: &str, fmt: Option<&str>) -> Result<i64> {
         Some(layout) => DateTime::parse_from_str(s, layout)?,
     };
     let dt_utc = dt_fixed.with_timezone(&Utc);
-    Ok(dt_utc.timestamp_millis() as i64)
+    Ok(dt_utc.timestamp_millis())
 }
 
 fn parse_i64(s: &str, base: u32) -> Result<i64> {
@@ -358,7 +358,7 @@ where
                 if &s[s.len() - 1..] == ":" {
                     s.pop();
                 }
-                self.bin_count = (&s).parse()?;
+                self.bin_count = s.parse()?;
                 if self.bin_count > 0 {
                     if r == Rule::BinCount {
                         self.begin(Mode::BinCount);

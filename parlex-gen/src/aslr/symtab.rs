@@ -39,7 +39,7 @@ impl Symtab {
     }
 
     pub fn _idx(&self, sym: &str) -> Option<usize> {
-        self.map.get(sym).map(|x| *x)
+        self.map.get(sym).copied()
     }
 
     pub fn sym(&self, idx: usize) -> Option<&str> {
@@ -50,7 +50,7 @@ impl Symtab {
         self.vec.len()
     }
 
-    pub fn _print(&self) -> () {
+    pub fn _print(&self) {
         for (i, s) in self.vec.iter().enumerate() {
             println!("{}: {}", i, s);
         }

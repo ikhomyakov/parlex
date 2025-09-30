@@ -172,7 +172,7 @@ pub fn generate<P: AsRef<Path>>(
     for (i, m) in modes.iter().enumerate() {
         writeln!(out, "        /* MODE {} {:?} */ [", i, m)?;
         let rules = rule_vecs.get(*m).ok_or(anyhow!("Missing mode {:?}", m))?;
-        for (_j, r) in rules.iter().enumerate() {
+        for r in rules.iter() {
             writeln!(out, "            Rule::{},", r.label)?;
         }
         for _ in rules.len()..max_mode_rules {
@@ -201,11 +201,11 @@ pub fn generate<P: AsRef<Path>>(
     let mut offset = 0;
     writeln!(out, "    const DFA_OFFSETS: &'static [usize] = &[")?;
 
-    for (_i, m) in modes.iter().enumerate() {
+    for m in modes.iter() {
         let rules = rule_vecs.get(*m).ok_or(anyhow!("Missing mode {:?}", m))?;
         let mut hirs = Vec::new();
         let conf = syntax::Config::new().utf8(false);
-        for (_j, r) in rules.iter().enumerate() {
+        for r in rules.iter() {
             hirs.push(syntax::parse_with(&r.regex, &conf).with_context(|| {
                 format!(
                     "Failed to parse regex {} for mode {:?} rule {:?}",

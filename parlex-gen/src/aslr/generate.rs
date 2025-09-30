@@ -238,7 +238,7 @@ pub fn generate<P: AsRef<Path>>(
         out,
         "    const COUNT: usize = Self::COUNT_NONTERMINALS + Self::COUNT_TERMINALS + 1;\n"
     )?;
-    writeln!(out, "    pub fn label(&self) -> &'static str {{")?;
+    writeln!(out, "    fn label(&self) -> &'static str {{")?;
     writeln!(out, "        TokenID::LABELS[Into::<usize>::into(*self)]")?;
     writeln!(out, "    }}")?;
     writeln!(out, "}}\n")?;

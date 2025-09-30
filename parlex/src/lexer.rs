@@ -157,6 +157,12 @@ pub trait Lexer<U> {
         let s = std::string::String::from_utf8(bytes)?;
         Ok(s.into())
     }
+
+    #[inline]
+    fn extend_buffer2_with_buffer(&mut self) {
+        let ctx = self.ctx_mut();
+        ctx.buffer2.extend(&ctx.buffer);
+    }
 }
 
 #[derive(Debug, Clone, Default)]

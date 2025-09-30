@@ -188,12 +188,14 @@ pub fn generate<P: AsRef<Path>>(
     writeln!(out, "    #[cfg(target_endian = \"little\")]")?;
     writeln!(
         out,
-        "    const DFA_BYTES: &[u8] = include_bytes_aligned!(4, \"dfa.le.bin\");"
+        "    const DFA_BYTES: &[u8] = include_bytes_aligned!(4, \"{}.dfale\");",
+        output_name
     )?;
     writeln!(out, "    #[cfg(target_endian = \"big\")]")?;
     writeln!(
         out,
-        "    const DFA_BYTES: &'static [u8] = include_bytes_aligned!(4, \"dfa.be.bin\");\n"
+        "    const DFA_BYTES: &'static [u8] = include_bytes_aligned!(4, \"{}.dfabe\");\n",
+        output_name
     )?;
 
     let mut offset = 0;

@@ -183,7 +183,7 @@ where
     input: I,
     unread: Vec<u8>,
 
-    accum_flag: bool,
+    pub accum_flag: bool,
     pub buffer: Vec<u8>,
     pub buffer2: Vec<u8>,
 

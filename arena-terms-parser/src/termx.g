@@ -27,6 +27,7 @@
 term1:      Term -> Expr
 term2:      Term -> Expr .
 term3:      Term ->
+term4:      Term -> .
 
 func:       Expr -> func Seq )
 list:       Expr -> [ Seq ]

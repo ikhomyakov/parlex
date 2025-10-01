@@ -1,6 +1,6 @@
 use anyhow::Result;
 use arena_terms::{Arena, Term};
-use arena_terms_parser::parser::TermParser;
+use arena_terms_parser::parser::{TermParser, parser_oper_defs};
 use clap::{Parser as ClapParser, Subcommand};
 use parlex::{Lexer, Parser};
 use smartstring::alias::String;
@@ -51,12 +51,14 @@ fn main() -> Result<()> {
             terms: terms_path,
         } => {
             let mut arena = Arena::new();
-            let mut parser = TermParser::try_new(open_input(&terms_path)?, None)?;
+            let mut parser =
+                TermParser::try_new(open_input(&terms_path)?, Some(parser_oper_defs(&mut arena)))?;
             if let Some(defs_path) = defs_path {
                 parser.define_opers(&mut arena, open_input(&defs_path)?, None)?;
             }
-            while let Some(tok) = parser.try_next(&mut arena)? {
-                println!("{}.", Term::try_from(tok.value)?.display(&arena));
+            while let Some(term) = parser.try_next_term(&mut arena)? {
+                println!("{} .", term.display(&arena));
+                log::debug!("{} .", term.display(&arena));
                 log::info!(
                     "Stats: {:?}, {:?}",
                     parser.ctx().lexer.stats(),

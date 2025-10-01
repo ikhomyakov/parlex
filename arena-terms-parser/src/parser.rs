@@ -12,7 +12,7 @@ use std::{fmt, mem};
 include!(concat!(env!("OUT_DIR"), "/parser_data.rs"));
 
 // pub const PARSER_OPER_DEFS_STR: &str = "[op(-(x), prefix, 800, right, none, false), op(++(x, y), infix, 500, left, none, false), op(=(x, y), infix, 100, right, none, false), op(op(f, =(type, fun), =(prec, 0), =(assoc, none), =(rename_to, none), =(embed_type, false)), fun, 0, none, none, false)]";
-fn parser_oper_defs(arena: &mut Arena) -> OperDefs {
+pub fn parser_oper_defs(arena: &mut Arena) -> OperDefs {
     let term = list![
         func!(
             "op";
@@ -84,6 +84,29 @@ where
         })
     }
 
+    pub fn try_collect_terms(&mut self, arena: &mut Arena) -> Result<Vec<Term>> {
+        let mut ts = Vec::new();
+        while let Some(t) = self.try_next_term(arena)? {
+            ts.push(t);
+        }
+        Ok(ts)
+    }
+
+    #[inline]
+    pub fn try_next_term(&mut self, arena: &mut Arena) -> Result<Option<Term>> {
+        while let Some(tok) = self.try_next(arena)? {
+            match tok.token_id {
+                TokenID::Term => match tok.value {
+                    Value::None => {}
+                    Value::Term(term) => return Ok(Some(term)),
+                    value => bail!("Unexpected token value {:?}", value),
+                },
+                token_id => bail!("Unexpected token id {:?}", token_id),
+            }
+        }
+        Ok(None)
+    }
+
     pub fn define_opers<J: FusedIterator<Item = u8>>(
         &mut self,
         arena: &mut Arena,
@@ -101,8 +124,7 @@ where
             ctx: defs_ctx,
             terms: Vec::new(),
         };
-        while let Some(tok) = defs_parser.try_next(arena)? {
-            let term = Term::try_from(tok.value)?;
+        while let Some(term) = defs_parser.try_next_term(arena)? {
             log::trace!(
                 "Stats: {:?}, {:?}",
                 defs_parser.ctx().lexer.stats(),
@@ -420,6 +442,12 @@ where
                 self.tokens_push(TermToken::new(TokenID::Term, Value::None, token.line_no));
             }
 
+            ProdID::Term4 => {
+                // Term -> .
+                self.tokens_pop()?;
+                self.tokens_push(TermToken::new(TokenID::Term, Value::None, token.line_no));
+            }
+
             ProdID::Func => {
                 // Expr -> func Seq )
                 self.tokens_pop()?;
@@ -533,7 +561,7 @@ where
                 let line_no = atom_tok.line_no;
                 let op_tab_index = atom_tok.op_tab_index;
 
-                let atom = Term::try_from(self.tokens_pop()?.value)?;
+                let atom = Term::try_from(atom_tok.value)?;
 
                 let term = self.normalize_term(arena, atom, Fixity::Fun, op_tab_index)?;
 
@@ -723,64 +751,71 @@ where
 mod tests {
     use super::*;
 
-    const TPXLS_DEFS: &str = r#"[
-% op(==(x,y),infix,350,none),
-% op(!=(x,y),infix,350,none),
-% op( <(x,y),infix,350,none),
-% op( >(x,y),infix,350,none),
-% op(<=(x,y),infix,350,none),
-% op(>=(x,y),infix,350,none),
-% op('+'(x,y),infix,380,left),
-% op('-'(x,y),infix,380,left),
-% op('*'(x,y),infix,400,left),
-% op('/'(x,y),infix,400,left),
-% op('+'(x),prefix,800,right),
-% op(and(x,y),infix,300,left),
-% op(or(x,y),infix,250,left),
-% op(not(x),prefix,800,right),
-
-% op(tsbegin(name, args=[])),
-% op(chartAxis(name, title)),
-% op(chartTitle(title)),
-% op(htsbegin(name, args=[])),
-% op(tsbeginnull(name, args=[])),
-% op(tsbeginheader(name, args=[])),
-% op(tsbeginfooter(name, args=[])),
-% op(tsbeginpageheader(name, args=[])),
-% op(tsbeginpagefooter(name, args=[])),
-% op(regBegin(name, skipCond=0)),
-% op(regRow(skipCond=0)),
-% op(regCol(skipCond=0)),
-% op(regEnd(name)),
-% op(script(code, lang=lua), prefix, 50, right),
-% op(eval(code, lang=lua), prefix, 50, right),
-% op(tsgroup(name,commands=[],skipCond=0)),
-% op(datamatrix(data,symbolSize='16x48',margin=10,moduleSize=4,offsetX=0,offsetY=0,width=auto,height=auto,resolution=72,encoding=ascii,type=plain)),
-]."#;
+    const SAMPLE_DEFS: &str = r#"[
+op(==(x,y),infix,350,none),
+op(!=(x,y),infix,350,none),
+op( <(x,y),infix,350,none),
+op( >(x,y),infix,350,none),
+op(<=(x,y),infix,350,none),
+op(>=(x,y),infix,350,none),
+op('+'(x,y),infix,380,left),
+op('-'(x,y),infix,380,left),
+op('-'(x),postfix,900,left, rename_to=some('postfix_minus')),
+op('*'(x,y),infix,400,left),
+op('/'(x,y),infix,400,left),
+op('+'(x),prefix,800,right),
+op(and(x,y),infix,300,left),
+op(or(x,y),infix,250,left),
+op(not(x),prefix,800,right),
+]"#;
 
     fn parse(arena: &mut Arena, defs: Option<&str>, s: &str) -> Result<Vec<Term>> {
-        //let mut parser = TermParser::try_new(s.bytes().fuse(), Some(parser_oper_defs(arena)))?;
-        let mut parser = TermParser::try_new(s.bytes().fuse(), None)?;
-
+        let mut parser = TermParser::try_new(s.bytes().fuse(), Some(parser_oper_defs(arena)))?;
         if let Some(defs) = defs {
-            //parser.define_opers(arena, defs.bytes().fuse(), None)?;
+            parser.define_opers(arena, defs.bytes().fuse(), None)?;
         }
-
-        let mut vs = Vec::new();
-        while let Some(tok) = parser.try_next(arena)? {
-            dbg!((&tok, &parser.ctx().lexer.stats(), &parser.stats()));
-            vs.push(Term::try_from(tok.value).unwrap());
-        }
-
-        Ok(vs)
+        parser.try_collect_terms(arena)
     }
 
     #[test]
-    #[ignore]
-    fn one_two() {
-        env_logger::init();
+    fn one_term() {
+        let _ = env_logger::builder().is_test(true).try_init();
         let arena = &mut Arena::new();
-        let ts = parse(arena, Some(TPXLS_DEFS), "'Hello, world!' .").unwrap();
+        let ts = parse(arena, Some(SAMPLE_DEFS), " . . 2 * 2 <= 5 . .").unwrap();
         dbg!(&ts);
+        let s = format!("{}", ts[0].display(arena));
+        dbg!(&s);
+        assert_eq!(ts.len(), 1);
+        assert_eq!(s, "'<='('*'(2, 2), 5)");
+    }
+
+    #[test]
+    #[should_panic]
+    fn missing_ops() {
+        let arena = &mut Arena::new();
+        let ts = parse(arena, None, "2 * 2 <= 5").unwrap();
+    }
+
+    #[test]
+    fn more_complicated_term() {
+        let _ = env_logger::builder().is_test(true).try_init();
+        let arena = &mut Arena::new();
+        let x = "(
+[(1, 2) | unit] ++ foo(baz(1e-9)),
+date{2025-09-30T18:24:22.154Z},
+\"aaa{
+1 + 2
+}bbb{
+3 * 4
+}ccc\",
+{player = {pos = {x = 0, y = 0}, health = 100}},
+)";
+        let ts = parse(arena, Some(SAMPLE_DEFS), x).unwrap();
+        let s = format!("{}", ts[0].display(arena));
+        assert_eq!(ts.len(), 1);
+        assert_eq!(
+            s,
+            "('++'([(1, 2) | unit], foo(baz(0.000000001))), date(2025-09-30T18:24:22.154+00:00), '++'('++'('++'('++'(\"aaa\", '+'(1, 2)), \"bbb\"), '*'(3, 4)), \"ccc\"), \"player = {pos = {x = 0, y = 0}, health = 100}\")"
+        );
     }
 }

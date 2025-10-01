@@ -10,7 +10,7 @@ use std::mem;
 
 include!(concat!(env!("OUT_DIR"), "/lexer_data.rs"));
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum Value {
     #[default]
     None,
@@ -40,6 +40,17 @@ macro_rules! impl_tryfrom_value {
 impl_tryfrom_value! {
     Term => Term,
     Index => usize,
+}
+
+impl TryFrom<Value> for Option<Term> {
+    type Error = Error;
+    fn try_from(v: Value) -> Result<Self> {
+        match v {
+            Value::None => Ok(None),
+            Value::Term(x) => Ok(Some(x)),
+            _ => ::anyhow::bail!("invalid value: expected Term or None"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -189,11 +200,13 @@ where
         rule: <Self::LexerData as LexerData>::LexerRule,
     ) -> Result<()> {
         log::trace!(
-            "ACTION begin: rule {:?}, buf {:?}, buf2 {:?}, label{:?}",
+            "ACTION begin: mode {:?}, rule {:?}, buf {:?}, buf2 {:?}, label {:?}, accum {}",
+            self.ctx().mode,
             rule,
             str::from_utf8(&self.ctx().buffer),
             str::from_utf8(&self.ctx().buffer2),
             str::from_utf8(&self.bin_label),
+            self.ctx().accum_flag,
         );
         match rule {
             Rule::Empty => {
@@ -244,11 +257,13 @@ where
                 if self.curly_nest_count >= 0 {
                     self.begin(Mode::Str);
                     self.yield_id(TokenID::RightParen);
-                    self.yield_term(TokenID::Atom, arena.atom("++"));
+                    let op_tab_idx = self.opers.lookup("++");
+                    self.yield_optab(TokenID::AtomOper, arena.atom("++"), op_tab_idx);
+                    self.clear();
+                    self.accum();
                 } else {
                     self.yield_term(TokenID::Error, arena.str("}"));
                 }
-                self.clear();
             }
             Rule::Func => {
                 self.nest_count += 1;
@@ -695,7 +710,8 @@ where
                 let mut s = self.take_str()?;
                 s.pop();
                 self.yield_term(TokenID::Str, arena.str(s));
-                self.yield_term(TokenID::Atom, arena.atom("++"));
+                let op_tab_idx = self.opers.lookup("++");
+                self.yield_optab(TokenID::AtomOper, arena.atom("++"), op_tab_idx);
                 self.yield_id(TokenID::LeftParen);
             }
             Rule::StrAtomNewLine => {
@@ -715,11 +731,13 @@ where
         }
 
         log::trace!(
-            "ACTION end: rule {:?}, buf {:?}, buf2 {:?}, label{:?}",
+            "ACTION end:   mode {:?}, rule {:?}, buf {:?}, buf2 {:?}, label {:?}, accum {}",
+            self.ctx().mode,
             rule,
             str::from_utf8(&self.ctx().buffer),
             str::from_utf8(&self.ctx().buffer2),
             str::from_utf8(&self.bin_label),
+            self.ctx().accum_flag,
         );
 
         Ok(())
@@ -828,8 +846,21 @@ mod tests {
     fn test_integers() {
         let mut arena = Arena::new();
         let ts = lex(&mut arena, "[2'01010001111, 10'123, 36'AZ]").unwrap();
-        dbg!(&ts);
         assert!(ts.len() == 8);
         assert!(matches!(ts[1].token_id, TokenID::Int));
+    }
+
+    #[test]
+    fn lex_string_subs() {
+        env_logger::init();
+        let arena = &mut Arena::new();
+        let ts = lex(arena, "\"aaa{1 + 2}bbb{3 * 4}ccc\"").unwrap();
+        assert_eq!(ts.len(), 18);
+        let t0: Term = ts[0].value.clone().try_into().unwrap();
+        let t1: Term = ts[8].value.clone().try_into().unwrap();
+        let t2: Term = ts[16].value.clone().try_into().unwrap();
+        assert_eq!(t0.unpack_str(arena).unwrap(), "aaa");
+        assert_eq!(t1.unpack_str(arena).unwrap(), "bbb");
+        assert_eq!(t2.unpack_str(arena).unwrap(), "ccc");
     }
 }

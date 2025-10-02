@@ -97,7 +97,7 @@ fn parse_i64(s: &str, base: u32) -> Result<i64> {
     if s.is_empty() {
         return Ok(0);
     }
-    match u64::from_str_radix(s, base) {
+    match i64::from_str_radix(s, base) {
         Ok(n) => Ok(n.try_into()?),
         Err(e) if e.kind() == &std::num::IntErrorKind::InvalidDigit => {
             bail!("digit not valid for base")
@@ -118,6 +118,7 @@ where
     script_curly_nest_count: isize,
     bin_count: isize,
     bin_label: Vec<u8>,
+    date_format: String,
 }
 
 impl<I> TermLexer<I>
@@ -137,6 +138,7 @@ where
             script_curly_nest_count: 0,
             bin_count: 0,
             bin_label: Vec::new(),
+            date_format: String::new(),
         })
     }
 
@@ -322,13 +324,116 @@ where
                     }
                 }
             }
-            Rule::Date => {
-                self.ctx_mut().buffer.pop();
-                self.ctx_mut().buffer.drain(0..5);
-                let s = self.take_str()?;
-                let d = parse_date_to_epoch(s.as_str(), None)?;
+
+            Rule::DateEpoch => {
+                let mut s = self.take_str()?;
+                s.pop();
+                s.drain(0..5);
+                let s = s.trim();
+                let d = parse_i64(s, 10)?;
                 self.yield_term(TokenID::Date, arena.date(d));
             }
+            Rule::Date => {
+                self.begin(Mode::Date);
+                self.clear();
+                self.ctx_mut().buffer2.clear();
+                self.date_format.clear();
+            }
+            Rule::Date1 => {
+                self.begin(Mode::Time);
+                self.date_format.push_str("%Y-%m-%d");
+                self.extend_buffer2_with_buffer();
+            }
+            Rule::Date2 => {
+                self.begin(Mode::Time);
+                self.date_format.push_str("%m/%d/%Y");
+                self.extend_buffer2_with_buffer();
+            }
+            Rule::Date3 => {
+                self.begin(Mode::Time);
+                self.date_format.push_str("%d-%b-%Y");
+                self.extend_buffer2_with_buffer();
+            }
+            Rule::Time1 => {
+                self.begin(Mode::Zone);
+                self.date_format.push_str("T%H:%M:%S%.f");
+                self.extend_buffer2_with_buffer();
+            }
+            Rule::Time2 => {
+                self.begin(Mode::Zone);
+                self.date_format.push_str("T%H:%M:%S");
+                self.extend_buffer2_with_buffer();
+                self.ctx_mut().buffer2.extend(b":00");
+            }
+            Rule::Time3 => {
+                self.begin(Mode::Zone);
+                self.date_format.push_str(" %H:%M:%S%.f");
+                self.extend_buffer2_with_buffer();
+            }
+            Rule::Time4 => {
+                self.begin(Mode::Zone);
+                self.date_format.push_str(" %H:%M:%S");
+                self.extend_buffer2_with_buffer();
+                self.ctx_mut().buffer2.extend(b":00");
+            }
+            Rule::Time5 => {
+                self.begin(Mode::Zone);
+                self.date_format.push_str(" %I:%M:%S%.f %p");
+                self.extend_buffer2_with_buffer();
+            }
+            Rule::Time6 => {
+                self.begin(Mode::Zone);
+                self.date_format.push_str(" %I:%M:%S %p");
+                let ctx = &mut self.ctx_mut();
+                ctx.buffer2.extend(&ctx.buffer[..ctx.buffer.len() - 3]);
+                ctx.buffer2.extend(b":00");
+                ctx.buffer2.extend(&ctx.buffer[ctx.buffer.len() - 3..]);
+            }
+            Rule::Zone1 => {
+                if self.ctx().mode == Mode::Time {
+                    self.date_format.push_str(" %H:%M:%S");
+                    self.ctx_mut().buffer2.extend(b" 00:00:00");
+                }
+                self.begin(Mode::Expr);
+                self.date_format.push_str("%:z");
+                self.ctx_mut().buffer2.extend(b"+00:00");
+                let s = self.take_str2()?;
+                let d = parse_date_to_epoch(s.trim_end(), Some(self.date_format.as_str()))?;
+                self.yield_term(TokenID::Date, arena.date(d));
+            }
+            Rule::Zone2 => {
+                if self.ctx().mode == Mode::Time {
+                    self.date_format.push_str(" %H:%M:%S");
+                    self.ctx_mut().buffer2.extend(b" 00:00:00");
+                }
+                self.begin(Mode::Expr);
+                if self.ctx.buffer[0] == b' ' {
+                    self.date_format.push(' ');
+                }
+                self.date_format.push_str("%:z");
+                self.ctx_mut().buffer.pop();
+                self.extend_buffer2_with_buffer();
+                let s = self.take_str2()?;
+                let d = parse_date_to_epoch(s.trim_end(), Some(self.date_format.as_str()))?;
+                self.yield_term(TokenID::Date, arena.date(d));
+            }
+            Rule::TimeRightBrace => {
+                self.begin(Mode::Expr);
+                self.date_format.push_str(" %H:%M:%S%:z");
+                self.ctx_mut().buffer2.extend(b" 00:00:00+00:00");
+                let s = self.take_str2()?;
+                let d = parse_date_to_epoch(&s, Some(self.date_format.as_str()))?;
+                self.yield_term(TokenID::Date, arena.date(d));
+            }
+            Rule::ZoneRightBrace => {
+                self.begin(Mode::Expr);
+                self.date_format.push_str("%:z");
+                self.ctx_mut().buffer2.extend(b"+00:00");
+                let s = self.take_str2()?;
+                let d = parse_date_to_epoch(&s, Some(self.date_format.as_str()))?;
+                self.yield_term(TokenID::Date, arena.date(d));
+            }
+
             Rule::Hex => {
                 self.begin(Mode::Hex);
                 self.ctx_mut().buffer2.clear();
@@ -751,6 +856,94 @@ mod tests {
     fn lex(arena: &mut Arena, s: &str) -> Result<Vec<TermToken>> {
         let mut lx = TermLexer::try_new(s.bytes().fuse(), Some(OperDefs::new()))?;
         Ok(lx.try_collect(arena)?)
+    }
+
+    #[test]
+    fn test_dates() {
+        let _ = env_logger::builder().is_test(true).try_init();
+        let mut arena = Arena::new();
+        const DATES: &[(&str, u8)] = &[
+            ("date{-5381856000000}", 0),
+            ("date{-5381830320000}", 1),
+            ("date{-5381830311000}", 2),
+            ("date{-5381830310999}", 3),
+            ("date{1799-06-16}", 0),
+            ("date{1799-06-16Z}", 0),
+            ("date{1799-06-16 Z}", 0),
+            ("date{1799-06-16-00:00}", 0),
+            ("date{1799-06-16 -00:00}", 0),
+            ("date{1799-06-16T07:08}", 1),
+            ("date{1799-06-16T07:08:09}", 2),
+            ("date{1799-06-16T07:08:09Z}", 2),
+            ("date{1799-06-16T07:08:09.001Z}", 3),
+            ("date{1799-06-16T07:08:09 Z}", 2),
+            ("date{1799-06-16T07:08:09.001 Z}", 3),
+            ("date{1799-06-16T07:08:09+00:00}", 2),
+            ("date{1799-06-16T07:08:09.001+00:00}", 3),
+            ("date{1799-06-16T07:08:09 +00:00}", 2),
+            ("date{1799-06-16T07:08:09.001 +00:00}", 3),
+            ("date{1799-06-16T07:08:09Z}", 2),
+            ("date{1799-06-16T07:08:09.001Z}", 3),
+            ("date{1799-06-16 07:08:09 Z}", 2),
+            ("date{1799-06-16T07:08:09.001 Z}", 3),
+            ("date{1799-06-16 07:08:09+00:00}", 2),
+            ("date{1799-06-16T07:08:09.001+00:00}", 3),
+            ("date{1799-06-16 07:08:09 +00:00}", 2),
+            ("date{1799-06-16 07:08:09.001 +00:00}", 3),
+            ("date{1799-06-16T07:08Z}", 1),
+            ("date{1799-06-16T07:08 Z  }", 1),
+            ("date{  1799-06-16T07:08+00:00}", 1),
+            ("date{ 1799-06-16T07:08 +00:00   }", 1),
+            ("date{06/16/1799Z}", 0),
+            ("date{06/16/1799 Z}", 0),
+            ("date{06/16/1799+00:00}", 0),
+            ("date{06/16/1799 +00:00}", 0),
+            ("date{06/16/1799 07:08Z}", 1),
+            ("date{06/16/1799 07:08:09Z}", 2),
+            ("date{06/16/1799 07:08:09.001Z}", 3),
+            ("date{06/16/1799 07:08 Z}", 1),
+            ("date{06/16/1799 07:08:09 Z}", 2),
+            ("date{06/16/1799 07:08:09.001 Z}", 3),
+            ("date{06/16/1799 07:08+00:00}", 1),
+            ("date{06/16/1799 07:08:09+00:00}", 2),
+            ("date{06/16/1799 07:08:09.001+00:00}", 3),
+            ("date{06/16/1799 07:08 +00:00}", 1),
+            ("date{06/16/1799 07:08:09 +00:00}", 2),
+            ("date{06/16/1799 07:08:09.001 +00:00}", 3),
+            ("date{16-Jun-1799Z}", 0),
+            ("date{16-jun-1799 Z}", 0),
+            ("date{16-JUN-1799+00:00}", 0),
+            ("date{16-Jun-1799 +00:00}", 0),
+            ("date{16-Jun-1799 07:08Z}", 1),
+            ("date{16-JUN-1799 07:08:09Z}", 2),
+            ("date{16-Jun-1799 07:08:09.001Z}", 3),
+            ("date{16-Jun-1799 07:08 Z}", 1),
+            ("date{16-jun-1799 07:08:09 Z}", 2),
+            ("date{16-Jun-1799 07:08:09.001 Z}", 3),
+            ("date{16-Jun-1799 07:08+00:00}", 1),
+            ("date{16-Jun-1799 07:08:09+00:00}", 2),
+            ("date{16-Jun-1799 07:08:09.001+00:00}", 3),
+            ("date{16-Jun-1799 07:08 +00:00}", 1),
+            ("date{16-Jun-1799 07:08:09 +00:00}", 2),
+            ("date{16-Jun-1799 07:08:09.001 +00:00}", 3),
+        ];
+        for (s, k) in DATES {
+            let mut ts = lex(&mut arena, s).unwrap();
+            let tok = ts.remove(0);
+            assert_eq!(tok.token_id, TokenID::Date);
+            let term = Term::try_from(tok.value).unwrap();
+            let d = term.unpack_date(&arena).unwrap();
+            assert_eq!(
+                d,
+                match k {
+                    0 => -5381856000000,
+                    1 => -5381830320000,
+                    2 => -5381830311000,
+                    3 => -5381830310999,
+                    _ => unreachable!(),
+                }
+            );
+        }
     }
 
     #[test]

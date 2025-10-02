@@ -520,7 +520,7 @@ where
 
                 let index = usize::try_from(seq_tok.value)?;
 
-                // Aware Express does not currently support unary tuples.
+                // Arena terms parser does not currently support unary tuples.
                 // TODO: Consider adding explicit unary tuple syntax `(expr,)`.
                 let vs = &self.terms[index..];
                 let term = if vs.len() == 1 {
@@ -621,7 +621,7 @@ where
                 let oper = Term::try_from(oper_tok.value)?;
 
                 let term = match oper.view(arena)? {
-                    // Aware Express currently gives special treatment to unary minus
+                    // Arena terms parser currently gives special treatment to unary minus
                     // on integer and real literals (it directly negates them).
                     // TODO: Consider handling minus at the lexical level.
                     View::Atom(s)

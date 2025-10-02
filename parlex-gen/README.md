@@ -81,7 +81,7 @@ fn main() {
         out_dir.display()
     );
     // Generate parser from specification
-    parlex_gen::aslr::generate(&input_file, &out_dir, "parser_data", false).unwrap();
+    aslr::generate(&input_file, &out_dir, "parser_data", false).unwrap();
 }
 ```
 

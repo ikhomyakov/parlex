@@ -1,3 +1,10 @@
+//! Command-line interface for the `alex` lexer generator.
+//!
+//! This binary provides a CLI for invoking [`alex::generate`] from the command
+//! line. It accepts an input `.alex` file, an optional output directory and
+//! writes the generated Rust lexer code into the specified location. You can
+//! run it manually to inspect the generated code.
+
 #[cfg(feature = "cli")]
 mod real {
     use clap::Parser;

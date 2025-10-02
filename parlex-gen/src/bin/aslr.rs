@@ -1,3 +1,10 @@
+//! Command-line interface for the `aslr` parser generator.
+//!
+//! This binary wraps the [`aslr::generate::generate`] function and exposes
+//! command-line options for generating an SLR parser from a grammar
+//! specification. It reads an input `.g` file and writes the generated
+//! parser code.
+
 #[cfg(feature = "cli")]
 mod real {
     use clap::Parser;

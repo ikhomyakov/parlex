@@ -19,7 +19,7 @@ name = "arena_terms_parser"
 path = "src/lib.rs" 
 
 [[bin]]
-name = "parser"
+name = "arena-terms-parser"
 path = "src/bin/arena_terms_parser.rs"
 required-features = ["cli"]
 

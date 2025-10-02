@@ -1,3 +1,16 @@
+//! Operator definitions and precedence handling.
+//!
+//! This module defines the [`Fixity`] and [`Assoc`] enums along with structures
+//! and functions for specifying operator definitions in the arena terms parser.
+//! Operators can be functions (`fun`), prefixes, infixes or postfixes and are
+//! parameterized by their precedence and associativity.
+//! The [`OperDefs`] structure stores operator definitions indexed by name and
+//! fixity, and provides lookup utilities.
+//!
+//! [`Fixity`]: enum.Fixity
+//! [`Assoc`]: enum.Assoc
+//! [`OperDefs`]: struct.OperDefs
+
 use anyhow::{Context, Result, anyhow, bail};
 use arena_terms::{Arena, Term, View};
 use indexmap::IndexMap;

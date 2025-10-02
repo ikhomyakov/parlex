@@ -1,3 +1,8 @@
+//! Command-line interface for the arena-backed terms parser.
+//!
+//! This binary wraps the [`TermParser`] and exposes
+//! command-line options for parsing arena-backed Prolog-like terms.
+
 use anyhow::Result;
 use arena_terms::{Arena, Term};
 use arena_terms_parser::parser::{TermParser, parser_oper_defs};

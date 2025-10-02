@@ -1,3 +1,14 @@
+//! Parser for Prolog‑like terms with operator definitions.
+//!
+//! This module defines the [`TermParser`] struct which uses a generated SLR
+//! parser to parse terms tokenized by the [`TermLexer`]. It manages operator
+//! definitions and resolves expressions according to precedence and associativity
+//! rules. The parser yields `Term` values from the `arena_terms` crate,
+//! representing values, atoms, functions, lists, and tuples.
+//!
+//! [`TermParser`]: struct.TermParser
+//! [`TermLexer`]: crate::lexer::TermLexer
+
 use crate::lexer::{TermLexer, TermToken, Value};
 use crate::oper::{Assoc, Fixity, MAX_OPER_PREC, MIN_OPER_PREC, OperDef, OperDefTab, OperDefs};
 use anyhow::{Context, Result, anyhow, bail};

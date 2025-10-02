@@ -3,6 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/parlex-gen.svg)](https://crates.io/crates/parlex-gen)
 [![Documentation](https://docs.rs/parlex-gen/badge.svg)](https://docs.rs/parlex-gen)
 [![License: LGPL-3.0-or-later](https://img.shields.io/badge/License-LGPL%203.0--or--later-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
+[![Rust](https://img.shields.io/badge/rust-stable-brightgreen.svg)](https://www.rust-lang.org)
 
 Lexer and parser generator tools for Rust.
 

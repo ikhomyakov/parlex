@@ -187,8 +187,19 @@ pub trait Parser<U> {
     /// Must be provided by the implementor and return `&mut ParserCtx`.
     fn ctx_mut(&mut self) -> &mut ParserCtx<Self::Lexer, Self::ParserData, U>;
 
-    /// Resolves an ambiguity using user-defined logic (e.g., precedence/associativity).
+    /// Resolves an ambiguity reported by the parser (e.g., shift/reduce).
     /// Must be provided by the implementor.
+    ///
+    /// # Parameters
+    /// - `user_data`: User data.
+    /// - `ambig`:  The ambiguity ID (`AmbigID`).
+    /// - `tok2`:   The lookahead token at the ambiguity point.
+    ///
+    /// # Returns
+    /// The selected parser [`Action`] to disambiguate the current state.
+    ///
+    /// # Errors
+    /// Returns an error if the ambiguity cannot be resolved consistently.
     fn resolve_ambiguity(
         &mut self,
         user_data: &mut U,
@@ -196,8 +207,16 @@ pub trait Parser<U> {
         tok2: &<Self::Lexer as Lexer<U>>::Token,
     ) -> Result<Action<Self, U>>;
 
-    /// Performs a reduction for the specified production.
+    /// Performs a grammar reduction for the given production rule.
     /// Must be provided by the implementor.
+    ///
+    /// # Parameters
+    /// - `user_data`: User data.
+    /// - `prod`:  The production being reduced (`ProdID`).
+    /// - `token`: The lookahead token (normally not used).
+    ///
+    /// # Errors
+    /// Returns an error if the reduction fails.
     fn reduce(
         &mut self,
         user_data: &mut U,

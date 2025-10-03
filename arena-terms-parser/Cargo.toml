@@ -16,7 +16,7 @@ build = "build.rs"
 
 [lib]
 name = "arena_terms_parser"
-path = "src/lib.rs" 
+path = "src/lib.rs"
 
 [[bin]]
 name = "arena-terms-parser"

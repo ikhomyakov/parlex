@@ -1,5 +1,5 @@
-S -> L = R  
-S -> R  
-L -> * R  
-L -> id  
+S -> L = R
+S -> R
+L -> * R
+L -> id
 R -> L

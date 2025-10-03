@@ -7,6 +7,10 @@ use chumsky::Parser;
 use std::io::Write;
 use std::path::Path;
 
+/// Capitalizes the first character of the given string.
+///
+/// Returns a new string with the first Unicode scalar value converted to uppercase.
+/// If the input is empty, an empty string is returned.
 fn capitalize_first(s: &str) -> String {
     let mut c = s.chars();
     match c.next() {
@@ -15,6 +19,12 @@ fn capitalize_first(s: &str) -> String {
     }
 }
 
+/// Determines the smallest unsigned integer type capable of representing `n` elements.
+///
+/// Returns `"u8"` if `n` fits within 8 bits, otherwise `"u16"`.
+///
+/// # Panics
+/// Panics if `n` exceeds `u16::MAX + 1`.
 fn calculate_minimum_unsigned_type(n: usize) -> &'static str {
     assert!(n <= u16::MAX as usize + 1);
     if n <= (u8::MAX as usize) + 1 {
@@ -24,7 +34,21 @@ fn calculate_minimum_unsigned_type(n: usize) -> &'static str {
     }
 }
 
-/// Generate parser code from a grammar file into an output Rust file.
+/// Generates parser code from a grammar file into a Rust source file.
+///
+/// Reads the grammar at `grammar_path`, parses production rules, symbols,
+/// and precedence definitions, and writes the generated parser implementation
+/// to `output_dir/output_name`.
+///
+/// # Parameters
+/// - `grammar_path`: Path to the grammar specification file.
+/// - `output_dir`: Destination directory for the generated Rust file.
+/// - `output_name`: Basename (without extension) of the generated file.
+/// - `output_debug_info`: When `true`, includes extra debug metadata for inspection.
+///
+/// # Errors
+/// Returns an error if the grammar cannot be read or parsed, if semantic checks fail,
+/// or if code generation/output fails.
 pub fn generate<P: AsRef<Path>>(
     grammar_path: P,
     output_dir: P,

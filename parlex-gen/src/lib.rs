@@ -2,7 +2,7 @@
 //!
 //! Released under the terms of the GNU Lesser General Public License, version 3.0
 //! or (at your option) any later version (LGPL-3.0-or-later).
-//!     
+//!
 //! Lexer and parser generators.
 //!
 //! `parlex-gen` provides two generators:

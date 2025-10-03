@@ -4,18 +4,58 @@
 use std::collections::BTreeSet;
 use std::io::{self, Write};
 
-/// An LR(0) item: production index + dot position
+/// Represents an LR(0) item consisting of a production index and a dot position.
+///
+/// Each item corresponds to a production with a marker (the *dot*) indicating
+/// how much of the right-hand side has been recognized during parsing.
+///
+/// For example, if production `E → E + T` is partially parsed as `E → E • + T`,
+/// the `Item` stores the production index for `E → E + T` and a dot position
+/// indicating the marker is after the first symbol.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Item {
+    /// The index of the production in the grammar.
     pub prod: usize,
+
+    /// The position of the dot within the production’s right-hand side.
     pub dot: usize,
 }
 
 /// A set of LR(0) items
 pub type ItemSet = BTreeSet<Item>;
+
+/// The canonical collection of LR(0) item sets.
+///
+/// Represents the set of all distinct item sets constructed during
+/// canonical collection generation in SLR(1) parser construction.
 /// The canonical collection of item-sets
 pub type ItemSetSet = BTreeSet<ItemSet>;
 
+/// Computes the LR(0) *closure* of a set of items.
+///
+/// For each item in the input set, this function adds new items corresponding
+/// to productions of the nonterminal immediately following the dot position,
+/// repeating until no new items are added.
+///
+/// # Parameters
+/// - `items`: The initial set of LR(0) items.
+/// - `prods`: A list of productions, where each production is represented as a
+///   sequence of symbol indices (with the left-hand side at index `0`).
+/// - `n_nonterm`: The number of nonterminal symbols in the grammar.
+///   Symbols with indices `< n_nonterm` are treated as nonterminals.
+///
+/// # Returns
+/// The full closure set containing the original and newly added items.
+///
+/// # Example
+/// ```text
+/// Given items for `S' → • S`
+/// and productions for `S → A`, `A → a`,
+/// this function will add items for each production of `S`.
+/// ```
+///
+/// # Notes
+/// This implementation operates purely on integer-based grammar encodings.
 pub fn closure(items: &ItemSet, prods: &[Vec<usize>], n_nonterm: usize) -> ItemSet {
     let mut c = items.clone();
     let mut inserted = true;
@@ -43,6 +83,23 @@ pub fn closure(items: &ItemSet, prods: &[Vec<usize>], n_nonterm: usize) -> ItemS
     c
 }
 
+/// Computes the LR(0) *goto* function for a given item set and grammar symbol.
+///
+/// Produces a new item set containing items advanced past `sym`,
+/// then computes and returns its closure.
+///
+/// # Parameters
+/// - `items`: The current set of LR(0) items.
+/// - `sym`: The grammar symbol to transition on (by index).
+/// - `prods`: The list of grammar productions, represented as symbol index vectors.
+/// - `n_nonterm`: The number of nonterminal symbols in the grammar.
+///
+/// # Returns
+/// The closure of all items reachable from `items` on the given symbol.
+///
+/// # Example
+/// Transitioning from items with `S → • A` on symbol `A` produces
+/// items with `S → A •`, followed by closure expansion.
 pub fn goto(items: &ItemSet, sym: usize, prods: &[Vec<usize>], n_nonterm: usize) -> ItemSet {
     let mut moved = ItemSet::new();
     for item in items {
@@ -57,6 +114,24 @@ pub fn goto(items: &ItemSet, sym: usize, prods: &[Vec<usize>], n_nonterm: usize)
     closure(&moved, prods, n_nonterm)
 }
 
+/// Constructs the canonical collection of LR(0) item sets.
+///
+/// Iteratively applies the [`closure`] and [`goto`] functions to generate
+/// all distinct item sets reachable from the start production.
+/// This process forms the foundation of LR(0), SLR(1), and LR(1)
+/// parser table construction.
+///
+/// # Parameters
+/// - `prods`: Grammar productions, represented as symbol index vectors.
+/// - `n_nonterm`: Number of nonterminal symbols in the grammar.
+/// - `n_term`: Number of terminal symbols in the grammar.
+///
+/// # Returns
+/// A canonical collection of LR(0) item sets (`ItemSetSet`).
+///
+/// # Example
+/// The first item set typically starts with the augmented production
+/// `S' → • S`, from which all other states are derived.
 pub fn construct_set(prods: &[Vec<usize>], n_nonterm: usize, n_term: usize) -> ItemSetSet {
     let mut c = ItemSetSet::new();
     // Start closure on initial item (prod 0, dot at 1)
@@ -76,6 +151,21 @@ pub fn construct_set(prods: &[Vec<usize>], n_nonterm: usize, n_term: usize) -> I
     }
     c
 }
+
+/// Writes the canonical collection of item sets to an output stream.
+///
+/// Each state and its corresponding items are written in a compact
+/// human-readable form for debugging or analysis. The output format
+/// includes markers for dot positions and symbol names.
+///
+/// # Parameters
+/// - `out`: The output writer (e.g., file, buffer, or stdout).
+/// - `c`: The canonical collection of item sets to display.
+/// - `prods`: The grammar productions as symbol index vectors.
+/// - `tokens`: Symbol names (terminals and nonterminals) indexed by symbol ID.
+///
+/// # Returns
+/// Returns `Ok(())` on success or an [`io::Error`] if writing fails.
 
 pub fn write_set<W: Write>(
     out: &mut W,
@@ -107,6 +197,30 @@ pub fn write_set<W: Write>(
     Ok(())
 }
 
+/// Writes the grammar productions to an output stream.
+///
+/// Each production is written in a compact, human-readable format,
+/// showing the left-hand side (LHS) and right-hand side (RHS) symbols
+/// using their string labels.
+///
+/// This function is primarily used for debugging, grammar inspection,
+/// or as part of parser table generation output.
+///
+/// # Parameters
+/// - `out`: The output writer (e.g., file, buffer, or stdout).
+/// - `prods`: The list of productions, represented as symbol index vectors.
+///   The first element of each vector is the left-hand side symbol.
+/// - `tokens`: Symbol names (terminals and nonterminals) indexed by symbol ID.
+///
+/// # Returns
+/// Returns `Ok(())` on success or an [`io::Error`] if writing fails.
+///
+/// # Output Format
+/// ```text
+/// PS,<number of productions>
+///
+/// P,<index>,<LHS> -> <RHS symbols>
+/// ```
 pub fn write_prods<W: Write>(
     out: &mut W,
     prods: &[Vec<usize>],
@@ -126,6 +240,16 @@ pub fn write_prods<W: Write>(
     Ok(())
 }
 
+/// Writes FIRST or FOLLOW sets to the output stream.
+///
+/// If `nullable` is provided, prints FIRST sets (including `` `empty' `` for nullable symbols);
+/// otherwise, prints FOLLOW sets. Each set is formatted in a compact, readable form.
+///
+/// # Parameters
+/// - `out`: Output writer (e.g., file or buffer).
+/// - `vs`: FIRST or FOLLOW sets for each grammar symbol.
+/// - `nullable`: Optional nullability flags (for FIRST sets).
+/// - `tokens`: Symbol names indexed by ID.
 pub fn write_fstflw<W: Write>(
     out: &mut W,
     vs: &[BTreeSet<usize>],
@@ -159,7 +283,20 @@ pub fn write_fstflw<W: Write>(
     Ok(())
 }
 
-/// Compute FIRST sets and nullability for all symbols
+/// Computes FIRST sets and nullability for all grammar symbols.
+///
+/// Iteratively determines which terminals can begin each nonterminal’s derivations
+/// and which symbols can derive the empty string.
+///
+/// # Parameters
+/// - `prods`: Grammar productions, with the LHS at index `0`.
+/// - `n_nonterm`: Number of nonterminal symbols.
+/// - `n_term`: Number of terminal symbols.
+///
+/// # Returns
+/// A tuple containing:
+/// - A vector of FIRST sets (one per symbol).
+/// - A vector of booleans marking nullable symbols.
 pub fn first_sets(
     prods: &[Vec<usize>],
     n_nonterm: usize,
@@ -208,7 +345,21 @@ pub fn first_sets(
     (first, nullable)
 }
 
-/// Compute FOLLOW sets for non-terminals
+/// Computes FOLLOW sets for all nonterminal symbols.
+///
+/// Determines which terminals can appear immediately after each nonterminal
+/// in valid derivations, using the provided FIRST sets and nullability information.
+///
+/// # Parameters
+/// - `prods`: Grammar productions, with the LHS at index `0`.
+/// - `n_nonterm`: Number of nonterminal symbols.
+/// - `n_term`: Number of terminal symbols.
+/// - `start_sym`: Index of the start symbol (receives end-of-input marker `$`).
+/// - `first`: Precomputed FIRST sets for all symbols.
+/// - `nullable`: Boolean flags indicating which symbols are nullable.
+///
+/// # Returns
+/// A vector of FOLLOW sets, one per nonterminal.
 pub fn follow_sets(
     prods: &[Vec<usize>],
     n_nonterm: usize,
@@ -265,7 +416,16 @@ pub fn follow_sets(
     follow
 }
 
-/// Find the index of a state in the collection (or -1)
+/// Finds the index of a given item set within the canonical collection.
+///
+/// Searches for an exact match of `target` in `c` and returns its index if found.
+///
+/// # Parameters
+/// - `c`: The canonical collection of LR(0) item sets.
+/// - `target`: The item set to locate.
+///
+/// # Returns
+/// The index of the matching state, or `None` if not found.
 fn find_state(c: &ItemSetSet, target: &ItemSet) -> Option<usize> {
     for (i, st) in c.iter().enumerate() {
         if st == target {
@@ -275,18 +435,31 @@ fn find_state(c: &ItemSetSet, target: &ItemSet) -> Option<usize> {
     None
 }
 
-/// Token action types
+/// Represents the type of parser action.
+///
+/// Each variant corresponds to a possible action in an LR parsing table,
+/// such as shifting, reducing, or accepting input.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ActTyp {
+    /// Error or invalid action.
     _Error = 0,
+    /// Accept action — indicates successful parse completion.
     Accept = 1,
+    /// Shift action — pushes a new state onto the stack.
     Shift = 2,
+    /// Reduce action — applies a grammar production.
     Reduce = 3,
+    /// Ambiguity marker (internal use).
     _Ambig = 4,
+    /// Goto action — transitions to a nonterminal state.
     Goto = 5,
 }
 
+/// Implementation of [`ActTyp`] methods.
+///
+/// Provides utility functions for representing parser action types.
 impl ActTyp {
+    /// Returns the string name of this action type.
     pub fn to_str(self) -> &'static str {
         match self {
             ActTyp::_Error => "Error",
@@ -300,16 +473,46 @@ impl ActTyp {
 }
 
 /// A parse action
+/// Represents a parser action entry.
+///
+/// Each action combines a type ([`ActTyp`]) with an associated value —
+/// such as a state index, production index, or target symbol.
+///
+/// Used in LR parsing tables to drive state transitions.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Act {
+    /// The action type (e.g., Shift, Reduce, Goto).
     pub typ: ActTyp,
+    /// The numeric value associated with the action
+    /// (e.g., target state or production index).
     pub val: usize,
 }
 
+/// Implementation of [`Act`] methods.
+///
+/// Provides constructors and formatting helpers for parser actions.
 impl Act {
+    /// Creates a new [`Act`] with the given type and value.
+    ///
+    /// # Parameters
+    /// - `typ`: The action type (e.g., [`ActTyp::Shift`], [`ActTyp::Reduce`]).
+    /// - `val`: The numeric value associated with the action,
+    ///   such as a state or production index.
     pub fn new(typ: ActTyp, val: usize) -> Self {
         Act { typ, val }
     }
+
+    /// Converts the action’s value into a readable string representation.
+    ///
+    /// Used for debugging or code generation. Formats the value according
+    /// to the action type (e.g., `"StateID(3)"`, `"ProdID::Expr1"`).
+    ///
+    /// # Parameters
+    /// - `prod_enums`: A list of production enum names used for reduce actions.
+    ///
+    /// # Returns
+    /// A formatted string representation, or `None` for actions
+    /// without a value (`Error`, `Accept`).
     pub fn val_to_string(&self, prod_enums: &[String]) -> Option<String> {
         match self.typ {
             ActTyp::_Error => None,
@@ -322,10 +525,38 @@ impl Act {
     }
 }
 
-/// SLR(1) parse table: rows states, cols tokens
+/// Represents an SLR(1) parse table.
+///
+/// The table is organized as a two-dimensional vector:
+/// - **Rows** correspond to parser states.
+/// - **Columns** correspond to grammar symbols (terminals and nonterminals).
+///
+/// Each cell contains a set of [`Act`] values representing possible
+/// parser actions (e.g., shift, reduce, goto).
+///
+/// Used internally to generate and serialize SLR(1) parsing tables.
 pub type Tab = Vec<Vec<BTreeSet<Act>>>;
 
-/// Construct SLR(1) parse table following the reference C++ API
+/// Constructs an SLR(1) parse table from the canonical collection.
+///
+/// Builds the full action/goto table using the canonical LR(0) item sets
+/// and the FOLLOW sets of the grammar. Each cell in the resulting table
+/// contains zero or more parser actions (`Shift`, `Reduce`, `Goto`, `Accept`).
+///
+/// # Parameters
+/// - `c`: The canonical collection of LR(0) item sets.
+/// - `flw`: The FOLLOW sets for each nonterminal.
+/// - `prods`: Grammar productions, with the LHS at index `0`.
+/// - `n_nonterm`: Number of nonterminal symbols.
+/// - `n_term`: Number of terminal symbols.
+///
+/// # Returns
+/// An [`Tab`] representing the constructed SLR(1) parse table.
+///
+/// # Notes
+/// - Shift actions are added for transitions on terminals.
+/// - Reduce actions are added for completed items using FOLLOW sets.
+/// - Goto entries are generated for transitions on nonterminals.
 pub fn construct_slr(
     c: &ItemSetSet,
     flw: &[BTreeSet<usize>],

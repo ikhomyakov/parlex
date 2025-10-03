@@ -84,9 +84,9 @@ checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
 name = "arena-terms"
-version = "0.3.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09fa33b5edd7240a1362091ee93fdf2f17f8cc8a3c1025f6625c45e17663c504"
+checksum = "b5e26615e0a533fc18da6076275796cbec553577e9c874fb322741ce1a0c906c"
 dependencies = [
  "chrono",
  "rand",
@@ -95,7 +95,7 @@ dependencies = [
 
 [[package]]
 name = "arena-terms-parser"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "anyhow",
  "arena-terms",
@@ -468,7 +468,7 @@ checksum = "a4895175b425cb1f87721b59f0f286c2092bd4af812243672510e1ac53e2e0ad"
 
 [[package]]
 name = "parlex"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "anyhow",
  "env_logger",
@@ -481,7 +481,7 @@ dependencies = [
 
 [[package]]
 name = "parlex-gen"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "anyhow",
  "chumsky",

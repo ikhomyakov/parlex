@@ -20,35 +20,78 @@ use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::Path;
 
+/// Represents a named regular expression used in lexer definitions.
+///
+/// Each instance stores the rule label and the resolved regular expression
+/// after variable substitution.
 #[derive(Debug, Clone)]
 struct LRegex {
+    /// The label identifying the regex rule.
     label: String,
-    regex: String, // after variable substitution
+
+    /// The regular expression
+    regex: String,
 }
 
+/// Represents a single lexer rule definition.
+///
+/// A lexer rule associates a label with one or more active lexer modes
+/// and a regular expression pattern to match.
 #[derive(Debug, Clone)]
 struct LexRule {
+    /// The label identifying the lexer rule.
     label: String,
+
+    /// The lexer modes in which this rule is active.
     modes: Vec<String>,
-    regex: String, // after variable substitution
+
+    /// The resolved regular expression, after variable substitution.
+    regex: String,
+
+    /// The source line number of this rule in the lexer specification.
     line_no: usize,
 }
 
+/// Represents a parsed lexer specification.
+///
+/// Contains variable definitions and fully expanded lexer rules after
+/// performing variable substitutions.
 #[derive(Debug, Default)]
 struct Parsed {
-    vars: HashMap<String, String>, // raw values from var defs
-    rules: Vec<LexRule>,           // regex is expanded
+    /// The mapping of variable names to their raw values defined in the lexer source.
+    vars: HashMap<String, String>,
+
+    /// The list of lexer rules with resolved and expanded regular expressions.
+    rules: Vec<LexRule>,
 }
 
+/// Regular expression for matching variable definitions in the form:
+/// ```text
+/// NAME = VALUE
+/// ```
 static VAR_DEF_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$"#).unwrap());
 
+/// Regular expression for matching lexer rule definitions in the form:
+/// ```text
+/// LABEL: <modes> pattern
+/// ```
 static LEX_RULE_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*<([^>]*)>\s*(.+)$"#).unwrap());
 
+/// Regular expression for detecting variable placeholders in the form:
+/// ```text
+/// {{ VAR_NAME }}
+/// ```
 static VAR_IN_REGEX_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}"#).unwrap());
 
+/// Determines the smallest unsigned integer type capable of representing `n` elements.
+///
+/// Returns `"u8"` if `n` fits within 8 bits, otherwise `"u16"`.
+///
+/// # Panics
+/// Panics if `n` exceeds `u16::MAX + 1`.
 fn calculate_minimum_unsigned_type(n: usize) -> &'static str {
     assert!(n <= u16::MAX as usize + 1);
     if n <= (u8::MAX as usize) + 1 {
@@ -58,7 +101,20 @@ fn calculate_minimum_unsigned_type(n: usize) -> &'static str {
     }
 }
 
-/// Generate lexer code from a spec file into an output Rust file.
+/// Generates lexer code from a specification file into a Rust source file.
+///
+/// Reads the lexer spec at `spec_path`, expands variables, parses rules/modes,
+/// and writes the generated lexer to `output_dir/output_name`.
+///
+/// # Parameters
+/// - `spec_path`: Path to the lexer specification file.
+/// - `output_dir`: Destination directory for the generated Rust file.
+/// - `output_name`: Basename (without extension) of the generated file.
+/// - `_output_debug_info`: When `true`, may include extra debug metadata (reserved).
+///
+/// # Errors
+/// Returns an error if the spec cannot be read or parsed, if variable expansion
+/// fails, or if code generation/output fails.
 pub fn generate<P: AsRef<Path>>(
     spec_path: P,
     output_dir: P,
@@ -276,6 +332,20 @@ pub fn generate<P: AsRef<Path>>(
     Ok(())
 }
 
+/// Parses an Alex-style lexer specification into rules, modes, and variables.
+///
+/// Performs syntactic parsing only; variable expansion is handled separately
+/// by [`expand_vars`].
+///
+/// # Returns
+/// - `Vec<LexRule>`: Collected lexer rules (regex not yet re-expanded unless
+///   the input already had literals).
+/// - `HashSet<String>`: Declared lexer mode names.
+/// - `HashMap<String, String>`: Variable definitions (`NAME -> raw value`).
+/// - `Option<String>`: Optional start mode label (if specified).
+///
+/// # Errors
+/// Returns an error if the input does not conform to the expected format.
 fn parse_alex(
     input: &str,
 ) -> Result<(
@@ -340,6 +410,17 @@ fn parse_alex(
     Ok((rules, modes, vars, start_mode))
 }
 
+/// Expands `{{VAR}}` placeholders using the provided variable map.
+///
+/// # Parameters
+/// - `input`: Text containing `{{ NAME }}` placeholders.
+/// - `vars`: Map of variable names to raw values used for substitution.
+///
+/// # Returns
+/// The input string with all placeholders expanded.
+///
+/// # Errors
+/// Returns an error if an undefined variable is referenced or if expansion fails.
 fn expand_vars(input: &str, vars: &HashMap<String, String>) -> Result<String> {
     let mut out = input.to_string();
     let mut seen_any = true;
@@ -378,6 +459,7 @@ fn expand_vars(input: &str, vars: &HashMap<String, String>) -> Result<String> {
     Ok(out)
 }
 
+/// Unit tests for the lexer specification parser.
 #[cfg(test)]
 mod tests {
     use super::*;

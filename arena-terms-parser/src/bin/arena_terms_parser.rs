@@ -1,7 +1,14 @@
-//! Command-line interface for the arena-backed terms parser.
+//! Command-line interface (CLI) for the arena-backed terms parser.
 //!
-//! This binary wraps the [`TermParser`] and exposes
-//! command-line options for parsing arena-backed Prolog-like terms.
+//! This binary wraps the [`TermParser`] and exposes a simple command-line interface
+//! for parsing Prolog-like terms backed by an [`Arena`] bump-allocator.
+//! It allows reading term input from standard input or files, parsing them
+//! into compact arena-allocated term representations, and printing or inspecting
+//! the results.
+//!
+//! [`TermParser`]: arena_terms_parser::parser::TermParser
+//! [`parser_oper_defs`]: arena_terms_parser::parser::parser_oper_defs
+//! [`Arena`]: arena_terms::Arena
 
 use anyhow::Result;
 use arena_terms::{Arena, Term};

@@ -96,12 +96,12 @@ pub trait Lexer<U> {
                 rule,
                 pattern.as_usize(),
                 match str::from_utf8(&self.ctx().buffer) {
-                    Ok(s) => s,
-                    Err(_) => &hex::encode(&self.ctx().buffer),
+                    Ok(s) => s.to_string(),
+                    Err(_) => hex::encode(&self.ctx().buffer),
                 },
                 match str::from_utf8(&self.ctx().buffer2) {
-                    Ok(s) => s,
-                    Err(_) => &hex::encode(&self.ctx().buffer2),
+                    Ok(s) => s.to_string(),
+                    Err(_) => hex::encode(&self.ctx().buffer2),
                 },
             );
 

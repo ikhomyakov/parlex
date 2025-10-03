@@ -1058,7 +1058,7 @@ mod tests {
 
     #[test]
     fn lex_string_subs() {
-        env_logger::init();
+        let _ = env_logger::builder().is_test(true).try_init();
         let arena = &mut Arena::new();
         let ts = lex(arena, "\"aaa{1 + 2}bbb{3 * 4}ccc\"").unwrap();
         assert_eq!(ts.len(), 18);

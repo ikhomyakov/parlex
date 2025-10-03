@@ -22,7 +22,6 @@
 //! # Crates.io
 //! Published at [crates.io/crates/parlex](https://crates.io/crates/parlex).
 
-
 mod lexer;
 mod parser;
 

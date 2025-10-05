@@ -3,7 +3,7 @@ members = ["parlex", "parlex-gen"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.8"
+version = "0.1.9"
 edition = "2024"
 rust-version = "1.89"
 authors = ["IKH Software, Inc. <support@ikhsoftware.com>"]
@@ -13,7 +13,7 @@ keywords = ["parser", "lexer", "generator", "slr", "regex"]
 categories = ["parsing", "compilers"]
 
 [workspace.dependencies]
-parlex = { version = "0.1.8", path = "parlex" }
+parlex = { version = "0.1.9", path = "parlex" }
 anyhow = "1.0.99"
 regex-automata = "0.4.9"
 regex-syntax = "0.8.5"

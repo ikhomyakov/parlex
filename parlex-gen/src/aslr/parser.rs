@@ -30,7 +30,7 @@
 //!
 //! # See Also
 //! - [`crate::lexer`]: For tokenization and lexical analysis.
-//! - [`crate::parser_ctx`](crate::parser_ctx): For runtime parser context management.
+//! - [`crate::parser_ctx`](crate::parser_ctx): For parser context management.
 use super::lexer::Token;
 use chumsky::prelude::*;
 

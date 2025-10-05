@@ -4,7 +4,7 @@
 //! specification and produces Rust source code for a deterministic finite
 //! automaton (DFA)‑based lexer. It leverages the [`regex_automata`] crate to
 //! compile the regular expressions and emits code that depends on the
-//! [`parlex`](https://crates.io/crates/parlex) runtime library.
+//! [`parlex`](https://crates.io/crates/parlex) core library.
 //! You can integrate it into a `build.rs` script.
 
 use anyhow::{Context, Result, anyhow, bail};

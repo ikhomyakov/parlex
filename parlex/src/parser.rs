@@ -413,7 +413,7 @@ pub struct ParserStats {
 
 /// Core parser execution context.
 ///
-/// `ParserCtx` manages the entire runtime state of the parser, including its lexer,
+/// `ParserCtx` manages the runtime state of the parser, including its lexer,
 /// parser states, token stack, and statistics. It is responsible for coordinating
 /// parsing operations, maintaining the parser stack, and collecting performance metrics.
 ///

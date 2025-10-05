@@ -262,7 +262,7 @@ pub struct LexerStats {
 
 /// Core lexer execution context.
 ///
-/// `LexerCtx` manages the entire runtime state of the lexer, including its input stream,
+/// `LexerCtx` manages the runtime state of the lexer, including its input stream,
 /// DFA tables, buffers, and recognized tokens. It is responsible for coordinating
 /// lexing operations, tracking position and mode, and maintaining internal statistics.
 ///

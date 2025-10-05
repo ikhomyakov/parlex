@@ -377,7 +377,7 @@ where
     }
 }
 
-/// Implements the [`Lexer`] trait for [`TermLexer`], integrating with the **parlex** runtime.
+/// Implements the [`Lexer`] trait for [`TermLexer`], integrating with the **parlex** runtime library.
 ///
 /// This binding wires the generated DFA / rule set (`LexData`) to the concrete
 /// term-lexing behavior provided by `TermLexer`. It exposes the lexer context

@@ -188,7 +188,6 @@
 //! ## See Also
 //!
 //! - [`parlex`](https://crates.io/crates/parlex) — core support library
-//! - [Main repository](https://github.com/ikhomyakov/parlex)
 //! - [arena-terms-parser](https://crates.io/crates/arena-terms-parser) — real-world example using **ALEX** and **ASLR**
 
 pub mod alex;

@@ -49,6 +49,5 @@ Released under the terms of the GNU Lesser General Public License, version 3.0 o
 ## See Also
 
 - [parlex-gen](https://crates.io/crates/parlex-gen) - Code generation tools **ALEX** and **ASLR**
-- [Main repository](https://github.com/ikhomyakov/parlex)
 - [arena-terms-parser](https://crates.io/crates/arena-terms-parser) — real-world example using **ALEX** and **ASLR**
 

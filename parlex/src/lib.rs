@@ -60,7 +60,6 @@
 //! ## See Also
 //!
 //! - [parlex-gen](https://crates.io/crates/parlex-gen) — Code generation tools (`alex` and `aslr`)
-//! - [Main repository](https://github.com/ikhomyakov/parlex)
 //! - [arena-terms-parser](https://crates.io/crates/arena-terms-parser) — real-world example using **ALEX** and **ASLR**
 
 mod lexer;

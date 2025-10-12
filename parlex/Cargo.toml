@@ -20,4 +20,6 @@ smartstring.workspace = true
 env_logger.workspace = true
 hex.workspace = true
 log.workspace = true
+try-next.workspace = true
+thiserror.workspace = true
 

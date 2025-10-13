@@ -152,7 +152,7 @@ pub fn generate<P: AsRef<Path>>(
     writeln!(out, "use include_bytes_aligned::include_bytes_aligned;")?;
     writeln!(
         out,
-        "use parlex::{{LexerMode, LexerRule, LexerData, Lexer, LexerCtx, Token}};\n"
+        "use parlex::{{LexerMode, LexerRule, LexerData, Lexer, LexerDriver, Token, LexerError}};\n"
     )?;
 
     let mut modes: Vec<_> = modes.iter().filter(|&s| s != "*").collect();
@@ -238,7 +238,7 @@ pub fn generate<P: AsRef<Path>>(
     writeln!(out, "    #[cfg(target_endian = \"little\")]")?;
     writeln!(
         out,
-        "    const DFA_BYTES: &[u8] = include_bytes_aligned!(4, \"{}.dfale\");",
+        "    const DFA_BYTES: &'static [u8] = include_bytes_aligned!(4, \"{}.dfale\");",
         output_name
     )?;
     writeln!(out, "    #[cfg(target_endian = \"big\")]")?;

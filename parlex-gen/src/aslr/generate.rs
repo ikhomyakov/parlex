@@ -137,7 +137,7 @@ pub fn generate<P: AsRef<Path>>(
 
     writeln!(
         out,
-        "use parlex::{{ParserAction, ParserStateID, ParserAmbigID, ParserProdID, ParserTokenID, ParserData, ParserStats, ParserCtx, Parser}};\n"
+        "use parlex::{{ParserAction, ParserStateID, ParserAmbigID, ParserProdID, ParserTokenID, ParserData, ParserStats, ParserDriver, Parser, ParserError}};\n"
     )?;
 
     let prod_labels: Vec<_> = prods
@@ -154,7 +154,7 @@ pub fn generate<P: AsRef<Path>>(
     writeln!(out, "#[derive(Debug, Clone, Copy, PartialEq, Eq)]")?;
     writeln!(
         out,
-        "pub struct StateID({});",
+        "pub struct StateID(pub {});",
         calculate_minimum_unsigned_type(n_states)
     )?;
     writeln!(out, "impl ParserStateID for StateID {{")?;
@@ -169,7 +169,7 @@ pub fn generate<P: AsRef<Path>>(
     writeln!(out, "#[derive(Debug, Clone, Copy, PartialEq, Eq)]")?;
     writeln!(
         out,
-        "pub struct AmbigID({});",
+        "pub struct AmbigID(pub {});",
         calculate_minimum_unsigned_type(n_ambigs)
     )?;
     writeln!(out, "impl ParserAmbigID for AmbigID {{")?;

@@ -372,10 +372,22 @@ where
         self.mode = mode;
     }
 
+    /// Returns the current mode.
+    #[inline]
+    pub fn mode(&self) -> <D::LexerData as LexerData>::LexerMode {
+        self.mode
+    }
+
     /// Returns the current line number.
     #[inline]
     pub fn line_no(&self) -> usize {
         self.line_no
+    }
+
+    /// Increments line number.
+    #[inline]
+    pub fn inc_line_no(&mut self) {
+        self.line_no += 1;
     }
 
     /// Switches on accumulation of bytes into the buffer.
@@ -406,7 +418,7 @@ where
 
     /// Takes accumulated bytes from the main buffer and converts them into a UTF-8 string.
     #[inline]
-    pub fn take_str(&mut self) -> Result<String, LexerError<I::Error, D::Error>> {
+    pub fn take_str(&mut self) -> Result<String, std::string::FromUtf8Error> {
         let bytes = self.take_bytes();
         let s = std::string::String::from_utf8(bytes)?;
         Ok(s.into())
@@ -712,9 +724,7 @@ where
 /// Unit tests for [`Lexer`] and related components.
 #[cfg(test)]
 mod tests {
-    use crate::lexer::{
-        Lexer, LexerData, LexerDriver, LexerError, LexerMode, LexerRule, Token,
-    };
+    use crate::lexer::{Lexer, LexerData, LexerDriver, LexerError, LexerMode, LexerRule, Token};
     use smartstring::alias::String;
     use std::fmt::Debug;
     use try_next::TryNextWithContext;
@@ -729,7 +739,7 @@ mod tests {
         let _ = env_logger::builder().is_test(true).try_init();
     }
 
-    #[derive(Debug, Clone, Copy, Default)]
+    #[derive(Debug, Clone)]
     struct XToken {
         token_id: usize,
         line_no: usize,
@@ -757,7 +767,7 @@ mod tests {
         type Token = XToken;
         type Lexer = Lexer<I, Self>;
         type Error = std::convert::Infallible;
-        type Context = String;
+        type Context = I::Context;
 
         fn action(
             &mut self,
@@ -812,11 +822,11 @@ mod tests {
         type Item = XToken;
         type Error =
             LexerError<<I as TryNextWithContext>::Error, <XLexerDriver<I> as LexerDriver>::Error>;
-        type Context = String;
+        type Context = I::Context;
 
         fn try_next_with_context(
             &mut self,
-            context: &mut String,
+            context: &mut I::Context,
         ) -> Result<Option<XToken>, <Self as TryNextWithContext>::Error> {
             context.push('a');
             self.lexer.try_next_with_context(context)

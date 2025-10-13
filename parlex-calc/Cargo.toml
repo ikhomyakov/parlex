@@ -1,24 +1,27 @@
 [package]
 name = "parlex-calc"
-version = "0.1.0"
-edition = "2024"
-rust-version = "1.89"
-authors = ["IKH Software, Inc. <support@ikhsoftware.com>"]
-license = "LGPL-3.0-or-later"
-repository = "https://github.com/ikhomyakov/parlex.git"
-keywords = ["parser", "generator", "regex", "yacc", "lex"]
-categories = ["parsing", "compilers"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
 readme = "README.md"
 description = "Parlex example: simple calculator"
 
 build = "build.rs"
 
 [dependencies]
-parlex = "0.1.10"
-anyhow = "1.0.99"
-smartstring = "1.0.1"
-clap = { version = "4.5.48", features = ["derive"] }
+parlex.workspace = true
+smartstring.workspace = true
+try-next.workspace = true
+thiserror.workspace = true
+include_bytes_aligned.workspace = true
+clap.workspace = true
+env_logger.workspace = true
+log.workspace = true
 
 [build-dependencies]
-parlex-gen = "0.1.10"
-
+parlex-gen.workspace = true

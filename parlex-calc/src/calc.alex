@@ -1,0 +1,22 @@
+WS = [ \t]
+NL = \n
+IDENT = [a-z_][a-z_A-Z0-9]*
+NUMBER = [0-9]+
+
+Ident: <Expr> {{IDENT}}
+Number: <Expr> {{NUMBER}}
+Semicolon: <Expr> ;
+Equals: <Expr> =
+Plus: <Expr> \+
+Minus: <Expr> -
+Asterisk: <Expr> \*
+Slash: <Expr> /
+LeftParen: <Expr> \(
+RightParen: <Expr> \)
+CommentBegin: <Expr, Comment> /\*
+CommentEnd: <Comment> \*/
+CommentChar: <Comment> .+
+NewLine: <*> {{NL}}
+WhiteSpace: <Expr> {{WS}}+
+Error: <*> .
+

@@ -9,7 +9,7 @@
 //!
 //! [`aslr`]: https://crates.io/crates/parlex-gen
 
-use crate::{Token};
+use crate::Token;
 use smartstring::alias::String;
 use std::fmt::Debug;
 use thiserror::Error;
@@ -50,10 +50,6 @@ where
     /// The parser encountered an unexpected end of input.
     #[error("unexpected end of stream")]
     UnexpectedEndOfStream,
-
-    /// Attempted to pop beyond the buffer capacity (stack underflow).
-    #[error("stack underflow while popping (overpop)")]
-    Overpop,
 
     /// The input source produced an error.
     #[error("lexer stream error: {0}")]
@@ -397,11 +393,11 @@ where
 
     /// Pops and returns the last (top) token from the stack.
     ///
-    /// # Errors
-    /// Returns an error if the stack is empty.
+    /// # Panics
+    /// Panics if the tokens stack is empty.
     #[inline]
-    pub fn tokens_pop(&mut self) -> Result<D::Token, ParserError<I::Error, D::Error, D::Token>> {
-        self.tokens.pop().ok_or_else(|| ParserError::Overpop)
+    pub fn tokens_pop(&mut self) -> D::Token {
+        self.tokens.pop().expect("stack underflow while popping")
     }
 
     /// Pushes a token onto the stack.
@@ -644,7 +640,7 @@ where
                 Action::<D>::Accept => {
                     log::trace!("Accept");
                     assert!(self.tokens.len() == 1);
-                    let token = self.tokens_pop()?;
+                    let token = self.tokens_pop();
                     return Ok(Some(token));
                 }
 
@@ -665,9 +661,7 @@ where
 /// Unit tests for [`Parser`] and related components.
 #[cfg(test)]
 mod tests {
-    use crate::lexer::{
-        Lexer, LexerData, LexerDriver, LexerError, LexerMode, LexerRule, Token,
-    };
+    use crate::lexer::{Lexer, LexerData, LexerDriver, LexerError, LexerMode, LexerRule, Token};
     use crate::parser::{
         Parser, ParserAction, ParserAmbigID, ParserData, ParserDriver, ParserError, ParserProdID,
         ParserStateID, ParserTokenID,
@@ -690,7 +684,7 @@ mod tests {
         let _ = env_logger::builder().is_test(true).try_init();
     }
 
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone)]
     struct XToken {
         token_id: TokenID,
         line_no: usize,
@@ -718,7 +712,7 @@ mod tests {
         type Token = XToken;
         type Lexer = Lexer<I, Self>;
         type Error = std::convert::Infallible;
-        type Context = String;
+        type Context = I::Context;
 
         fn action(
             &mut self,
@@ -766,11 +760,11 @@ mod tests {
         type Item = XToken;
         type Error =
             LexerError<<I as TryNextWithContext>::Error, <XLexerDriver<I> as LexerDriver>::Error>;
-        type Context = String;
+        type Context = I::Context;
 
         fn try_next_with_context(
             &mut self,
-            context: &mut String,
+            context: &mut I::Context,
         ) -> Result<Option<XToken>, <Self as TryNextWithContext>::Error> {
             context.push('a');
             self.lexer.try_next_with_context(context)
@@ -803,7 +797,7 @@ mod tests {
         type Token = XToken;
         type Parser = Parser<I, Self>;
         type Error = std::convert::Infallible;
-        type Context = String;
+        type Context = I::Context;
 
         fn resolve_ambiguity(
             &mut self,
@@ -883,11 +877,11 @@ mod tests {
             <XParserDriver<XLexer<I>> as ParserDriver>::Error,
             XToken,
         >;
-        type Context = String;
+        type Context = I::Context;
 
         fn try_next_with_context(
             &mut self,
-            context: &mut String,
+            context: &mut I::Context,
         ) -> Result<Option<XToken>, <Self as TryNextWithContext>::Error> {
             context.push('b');
             self.parser.try_next_with_context(context)

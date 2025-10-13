@@ -49,20 +49,7 @@ struct LexRule {
     regex: String,
 
     /// The source line number of this rule in the lexer specification.
-    line_no: usize,
-}
-
-/// Represents a parsed lexer specification.
-///
-/// Contains variable definitions and fully expanded lexer rules after
-/// performing variable substitutions.
-#[derive(Debug, Default)]
-struct Parsed {
-    /// The mapping of variable names to their raw values defined in the lexer source.
-    vars: HashMap<String, String>,
-
-    /// The list of lexer rules with resolved and expanded regular expressions.
-    rules: Vec<LexRule>,
+    _line_no: usize,
 }
 
 /// Regular expression for matching variable definitions in the form:
@@ -399,7 +386,7 @@ fn parse_alex(
                 label,
                 modes: rule_modes,
                 regex,
-                line_no,
+                _line_no: line_no,
             });
             continue;
         }

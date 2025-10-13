@@ -55,6 +55,12 @@ pub enum LexerError<IE, DE> {
     #[error("failed to deserialize DFA tables: {0}")]
     DfaDeserialize(#[from] regex_automata::util::wire::DeserializeError),
 
+    /// Failed to build DFA table.
+    ///
+    /// Currently used only in test mode.
+    #[error("failed to deserialize DFA tables: {0}")]
+    DfaBuild(#[from] dense::BuildError),
+
     /// A regex engine match error occurred during DFA evaluation.
     #[error("match error: {0}")]
     RegexMatch(#[from] regex_automata::MatchError),
@@ -224,7 +230,12 @@ where
     mode: <D::LexerData as LexerData>::LexerMode,
 
     /// The compiled deterministic finite automata (DFA) tables used for lexing.
+    #[cfg(not(test))]
     dfas: Vec<dense::DFA<&'static [u32]>>,
+
+    /// The compiled deterministic finite automata (DFA) tables used for lexing (test mode).
+    #[cfg(test)]
+    dfas: Vec<dense::DFA<Vec<u32>>>,
 
     /// Stack of bytes that have been unread or pushed back into the stream.
     unread: Vec<u8>,
@@ -282,20 +293,11 @@ where
     ///
     /// [`LexerDriver`]: crate::LexerDriver
     pub fn try_new(input: I, driver: D) -> Result<Self, LexerError<I::Error, D::Error>> {
-        let mut dfas = Vec::new();
-        let dfa_bytes = <D as LexerDriver>::LexerData::dfa_bytes();
-        let mut offset = 0;
-        for _ in 0..<D::LexerData as LexerData>::LexerMode::COUNT {
-            let (dfa, len) = dense::DFA::from_bytes(&dfa_bytes[offset..])?;
-            dfas.push(dfa);
-            offset += len;
-        }
-
         Ok(Self {
             driver: Some(Box::new(driver)),
             input,
             mode: <D as LexerDriver>::LexerData::start_mode(),
-            dfas,
+            dfas: Self::restore_dfas()?,
             unread: Vec::new(),
             accum_flag: false,
             buffer: Vec::new(),
@@ -306,7 +308,29 @@ where
         })
     }
 
-    /// Collects all tokens from the input until the end of stream.
+    #[cfg(not(test))]
+    fn restore_dfas()
+    -> Result<Vec<dense::DFA<&'static [u32]>>, regex_automata::util::wire::DeserializeError> {
+        let mut dfas = Vec::new();
+        let dfa_bytes = <D as LexerDriver>::LexerData::dfa_bytes();
+        let mut offset = 0;
+        for _ in 0..<D::LexerData as LexerData>::LexerMode::COUNT {
+            let (dfa, len) = dense::DFA::from_bytes(&dfa_bytes[offset..])?;
+            dfas.push(dfa);
+            offset += len;
+        }
+        Ok(dfas)
+    }
+
+    #[cfg(test)]
+    fn restore_dfas() -> Result<Vec<dense::DFA<Vec<u32>>>, dense::BuildError> {
+        let mut dfas = Vec::new();
+        let dfa = dense::DFA::new_many::<&str>(&[])?;
+        dfas.push(dfa);
+        Ok(dfas)
+    }
+
+    /// Attempts to collect all tokens produced by the lexer until the end of stream.
     ///
     /// Repeatedly advances the lexer by invoking [`try_next_with_context`]
     /// until no more tokens can be produced, returning the complete sequence
@@ -346,6 +370,12 @@ where
     #[inline]
     pub fn begin(&mut self, mode: <D::LexerData as LexerData>::LexerMode) {
         self.mode = mode;
+    }
+
+    /// Returns the current line number.
+    #[inline]
+    pub fn line_no(&self) -> usize {
+        self.line_no
     }
 
     /// Switches on accumulation of bytes into the buffer.
@@ -682,36 +712,21 @@ where
 /// Unit tests for [`Lexer`] and related components.
 #[cfg(test)]
 mod tests {
-    use crate::lexer;
+    use crate::lexer::{
+        Lexer, LexerData, LexerDriver, LexerError, LexerMode, LexerRule, Token,
+    };
+    use smartstring::alias::String;
+    use std::fmt::Debug;
+    use try_next::TryNextWithContext;
 
-    use super::*;
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/test_lexer_data.rs"
+    ));
 
     /// Initializes the test logger to enable log output during tests.
     fn init_logger() {
         let _ = env_logger::builder().is_test(true).try_init();
-    }
-
-    #[derive(Debug, Clone, Copy)]
-    struct XLexerMode;
-    impl LexerMode for XLexerMode {
-        const COUNT: usize = 0;
-    }
-    impl Into<usize> for XLexerMode {
-        fn into(self) -> usize {
-            0
-        }
-    }
-
-    #[derive(Debug, Clone, Copy)]
-    struct XLexerRule;
-    impl LexerRule for XLexerRule {
-        const COUNT: usize = 0;
-        const END: Self = Self;
-    }
-    impl Into<usize> for XLexerRule {
-        fn into(self) -> usize {
-            0
-        }
     }
 
     #[derive(Debug, Clone, Copy, Default)]
@@ -730,24 +745,6 @@ mod tests {
         }
     }
 
-    struct XLexerData {}
-    impl LexerData for XLexerData {
-        type LexerMode = XLexerMode;
-        type LexerRule = XLexerRule;
-
-        fn start_mode() -> Self::LexerMode {
-            XLexerMode
-        }
-        fn dfa_bytes() -> &'static [u8] {
-            &[]
-        }
-
-        #[inline]
-        fn lookup(_mode: Self::LexerMode, _pattern_id: usize) -> Self::LexerRule {
-            XLexerRule
-        }
-    }
-
     struct XLexerDriver<I> {
         _marker: std::marker::PhantomData<I>,
     }
@@ -756,7 +753,7 @@ mod tests {
     where
         I: TryNextWithContext<Item = u8, Context = String>,
     {
-        type LexerData = XLexerData;
+        type LexerData = LexData;
         type Token = XToken;
         type Lexer = Lexer<I, Self>;
         type Error = std::convert::Infallible;
@@ -768,10 +765,19 @@ mod tests {
             context: &mut Self::Context,
             rule: <Self::LexerData as LexerData>::LexerRule,
         ) -> Result<(), Self::Error> {
-            lexer.yield_token(XToken {
-                token_id: 0,
-                line_no: 0,
-            });
+            let token = match rule {
+                Rule::Empty => unreachable!(),
+                Rule::A => XToken {
+                    token_id: 1,
+                    line_no: lexer.line_no(),
+                }, // <Expr> .
+                Rule::End => XToken {
+                    token_id: 2,
+                    line_no: lexer.line_no(),
+                },
+            };
+            lexer.yield_token(token);
+            context.push('l');
             Ok(())
         }
     }
@@ -788,10 +794,14 @@ mod tests {
     {
         fn try_new(
             input: I,
-            driver: XLexerDriver<I>,
-        ) -> Result<Self, LexerError<I::Error, <XLexerDriver<I> as LexerDriver>::Error>> {
-            let mut lexer = Lexer::try_new(input, driver)?;
-            lexer.end_flag = true;
+        ) -> Result<
+            Self,
+            LexerError<<I as TryNextWithContext>::Error, <XLexerDriver<I> as LexerDriver>::Error>,
+        > {
+            let driver = XLexerDriver {
+                _marker: std::marker::PhantomData,
+            };
+            let lexer = Lexer::try_new(input, driver)?;
             Ok(Self { lexer })
         }
     }
@@ -800,14 +810,16 @@ mod tests {
         I: TryNextWithContext<Item = u8, Context = String>,
     {
         type Item = XToken;
-        type Error = std::convert::Infallible;
+        type Error =
+            LexerError<<I as TryNextWithContext>::Error, <XLexerDriver<I> as LexerDriver>::Error>;
         type Context = String;
+
         fn try_next_with_context(
             &mut self,
-            context: &mut Self::Context,
-        ) -> Result<Option<Self::Item>, Self::Error> {
+            context: &mut String,
+        ) -> Result<Option<XToken>, <Self as TryNextWithContext>::Error> {
             context.push('a');
-            Ok(None)
+            self.lexer.try_next_with_context(context)
         }
     }
 
@@ -820,6 +832,7 @@ mod tests {
             &mut self,
             context: &mut Self::Context,
         ) -> Result<Option<Self::Item>, Self::Error> {
+            context.push('e');
             Ok(None)
         }
     }
@@ -828,15 +841,12 @@ mod tests {
     #[test]
     fn empty_lexer() {
         init_logger();
-        let input = Empty {};
-        let driver = XLexerDriver {
-            _marker: std::marker::PhantomData,
-        };
         let mut context = String::new();
-        let mut lexer = XLexer::try_new(input, driver).unwrap();
+        let input = Empty {};
+        let mut lexer = XLexer::try_new(input).unwrap();
         while let Some(t) = lexer.try_next_with_context(&mut context).unwrap() {
             dbg!(&t);
         }
-        assert_eq!(context, "a");
+        assert_eq!(context, "aela");
     }
 }

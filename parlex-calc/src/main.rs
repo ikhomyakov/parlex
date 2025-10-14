@@ -13,7 +13,7 @@
 use clap::{Parser as ClapParser, Subcommand};
 use parlex_calc::{CalcParser, IterInput, SymTab};
 use smartstring::alias::String;
-use std::io::{BufReader, Read};
+use std::io::Read;
 use try_next::TryNextWithContext;
 
 #[derive(ClapParser, Debug)]
@@ -28,14 +28,12 @@ struct Args {
 enum Commands {
     /// Parses terms
     Parse {
-        /// Input file with parlex-calc statements
-        #[arg(short, long)]
-        input: String,
     },
 }
 
-fn open_input(path: &str) -> std::io::Result<impl Iterator<Item = u8>> {
-    let iter = BufReader::new(std::fs::File::open(path)?)
+fn open_input() -> std::io::Result<impl Iterator<Item = u8>> {
+    let iter = std::io::stdin()
+        .lock()
         .bytes()
         .map(Result::unwrap);
     Ok(iter)
@@ -47,10 +45,10 @@ fn main() {
     let args = Args::parse();
 
     match args.command {
-        Commands::Parse { input: path } => {
+        Commands::Parse {} => {
             let mut symtab = SymTab::new();
             let input =
-                IterInput::from(open_input(&path).expect(&format!("can't open {:?}", path)));
+                IterInput::from(open_input().expect("can't open stdin"));
             let mut parser = CalcParser::try_new(input).expect("can't create parser");
             let toks = parser
                 .try_collect_with_context(&mut symtab)

@@ -120,7 +120,8 @@ The calculator serves as:
 #### Running `parlex-calc` binary
 
 ```bash
-cargo run -p parlex-calc -- parse --input - <<'EOS'
+cargo run -p parlex-calc -- parse <<EOS
+/* examples */
 x = 2 + 3;
 y = x * 4
 EOS

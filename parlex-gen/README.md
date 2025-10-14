@@ -106,25 +106,27 @@ An Alex specification contains:
 ### Example
 
 ```text
-WS        = [ \t\f]+
-NL        = \r?\n
-DEC       = [0-9]
-ALPHA     = [A-Za-z_]
-ALNUM     = [A-Za-z0-9_]
-INT       = {{DEC}}+
-ID        = {{ALPHA}}{{ALNUM}}*
-OPER      = [=+\-*/();]
+WS = [ \t]
+NL = \r?\n
+IDENT = [a-z_][a-z_A-Z0-9]*
+NUMBER = [0-9]+
 
-SkipWS: <Expr> {{WS}}
-NewLine: <Expr> {{NL}}
-OperSym: <Expr> {{OPER}}
-Ident: <Expr> {{ID}}
-Integer: <Expr> {{INT}}
-CommentStart: <Expr, Comment> /\*
+Ident: <Expr> {{IDENT}}
+Number: <Expr> {{NUMBER}}
+Semicolon: <Expr> ;
+Equals: <Expr> =
+Plus: <Expr> \+
+Minus: <Expr> -
+Asterisk: <Expr> \*
+Slash: <Expr> /
+LeftParen: <Expr> \(
+RightParen: <Expr> \)
+CommentBegin: <Expr, Comment> /\*
 CommentEnd: <Comment> \*/
-CommentChar: <Comment> [^*\r\n]
-CommentNewLine: <Comment> {{NL}}
-ErrorAny: <*> .
+CommentChar: <Comment> [^*\r\n]+
+NewLine: <*> {{NL}}
+WhiteSpace: <Expr> {{WS}}+
+Error: <*> .
 ```
 
 > **Note:**
@@ -171,12 +173,17 @@ rule_name:   Nonterminal -> Symbol Symbol ...
 ### Example
 
 ```text
-stat1:  Stat ->
-stat2:  Stat -> ident = Expr
-expr1:  Expr -> Expr + Expr
-expr2:  Expr -> Expr * Expr
-expr3:  Expr -> ( Expr )
-expr4:  Expr -> int
+stat1: Stat ->
+stat2: Stat -> Expr
+stat3: Stat -> ident = Expr
+expr1: Expr -> number
+expr2: Expr -> ident
+expr3: Expr -> Expr + Expr
+expr4: Expr -> Expr - Expr
+expr5: Expr -> Expr * Expr
+expr6: Expr -> Expr / Expr
+expr7: Expr -> - Expr
+expr8: Expr -> ( Expr )
 ```
 
 ## License

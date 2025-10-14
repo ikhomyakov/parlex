@@ -1,5 +1,5 @@
 WS = [ \t]
-NL = \n
+NL = \r?\n
 IDENT = [a-z_][a-z_A-Z0-9]*
 NUMBER = [0-9]+
 
@@ -15,8 +15,7 @@ LeftParen: <Expr> \(
 RightParen: <Expr> \)
 CommentBegin: <Expr, Comment> /\*
 CommentEnd: <Comment> \*/
-CommentChar: <Comment> .+
+CommentChar: <Comment> [^*\r\n]+
 NewLine: <*> {{NL}}
 WhiteSpace: <Expr> {{WS}}+
 Error: <*> .
-

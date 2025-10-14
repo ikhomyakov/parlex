@@ -1,5 +1,6 @@
 mod calc;
-
-pub use calc::{ByteInput, CalcError, CalcLexer, CalcParser, CalcToken, SymTab, TokenValue};
+mod symtab;
 
 pub use calc::parser_data::TokenID;
+pub use calc::{CalcError, CalcLexer, CalcParser, CalcToken, IterInput, TokenValue};
+pub use symtab::{SymTab, SymTabError};

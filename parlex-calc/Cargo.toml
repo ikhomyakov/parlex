@@ -22,6 +22,7 @@ include_bytes_aligned.workspace = true
 clap.workspace = true
 env_logger.workspace = true
 log.workspace = true
+indexmap.workspace = true
 
 [build-dependencies]
 parlex-gen.workspace = true

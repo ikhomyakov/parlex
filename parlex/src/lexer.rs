@@ -330,42 +330,6 @@ where
         Ok(dfas)
     }
 
-    /// Attempts to collect all tokens produced by the lexer until the end of stream.
-    ///
-    /// Repeatedly advances the lexer by invoking [`try_next_with_context`]
-    /// until no more tokens can be produced, returning the complete sequence
-    /// of recognized tokens.
-    ///
-    /// The provided `context` is passed through to both the input source’s
-    /// [`TryNextWithContext`] implementation and the driver’s [`action`]
-    /// callback during tokenization, allowing shared mutable state to be used
-    /// across input reading and token emission.
-    ///
-    /// # Parameters
-    /// - `context`: Mutable reference to the driver’s context, used during
-    ///   input reading, token production, and mode transitions.
-    ///
-    /// # Returns
-    /// A vector containing all tokens recognized from the input.
-    ///
-    /// # Errors
-    /// Returns a [`LexerError`] if an input, driver, or DFA error occurs
-    /// during lexing.
-    ///
-    /// [`try_next_with_context`]: Self::try_next_with_context
-    /// [`action`]: crate::LexerDriver::action
-    /// [`TryNextWithContext`]: crate::TryNextWithContext
-    pub fn try_collect(
-        &mut self,
-        context: &mut D::Context,
-    ) -> Result<Vec<D::Token>, LexerError<I::Error, D::Error>> {
-        let mut ts = Vec::new();
-        while let Some(t) = self.try_next_with_context(context)? {
-            ts.push(t);
-        }
-        Ok(ts)
-    }
-
     /// Switches the lexer to a different mode.
     #[inline]
     pub fn begin(&mut self, mode: <D::LexerData as LexerData>::LexerMode) {

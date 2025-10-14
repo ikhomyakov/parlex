@@ -435,42 +435,6 @@ where
         }
     }
 
-    /// Attempts to collect all tokens produced by the parser until the end of stream.
-    ///
-    /// The parser repeatedly advances by invoking [`try_next_with_context`],
-    /// consuming and reducing tokens from the underlying lexer into its own
-    /// output stream. This continues until no more tokens can be produced,
-    /// returning the complete sequence of parsed tokens.
-    ///
-    /// The provided `context` is forwarded to both the lexer’s
-    /// [`TryNextWithContext`] implementation and the driver’s callbacks,
-    /// allowing shared mutable state to be used across token consumption
-    /// and emission.
-    ///
-    /// # Parameters
-    /// - `context`: Mutable reference to the driver’s context, used during
-    ///   lexing, token reduction, and mode transitions.
-    ///
-    /// # Returns
-    /// A vector containing all tokens emitted by the parser.
-    ///
-    /// # Errors
-    /// Returns a [`ParserError`] if a lexer, driver, or DFA error occurs
-    /// during parsing.
-    ///
-    /// [`try_next_with_context`]: Self::try_next_with_context
-    /// [`TryNextWithContext`]: crate::TryNextWithContext
-    pub fn try_collect(
-        &mut self,
-        context: &mut D::Context,
-    ) -> Result<Vec<D::Token>, ParserError<I::Error, D::Error, D::Token>> {
-        let mut ts = Vec::new();
-        while let Some(t) = self.try_next_with_context(context)? {
-            ts.push(t);
-        }
-        Ok(ts)
-    }
-
     /// This helper temporarily takes ownership of the driver from the [`Parser`]
     /// to satisfy Rust’s borrowing rules, allowing the driver to receive a
     /// mutable reference to the parser during the callback without causing

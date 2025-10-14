@@ -238,6 +238,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ee796ad498c8d9a1d68e477df8f754ed784ef875de1414ebdaf169f70a6a784"
 
 [[package]]
+name = "indexmap"
+version = "2.11.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b0f83760fb341a774ed326568e19f5a863af4a952def8c39f9ab92fd95b88e5"
+dependencies = [
+ "equivalent",
+ "hashbrown",
+]
+
+[[package]]
 name = "is_terminal_polyfill"
 version = "1.70.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -359,6 +369,7 @@ dependencies = [
  "clap",
  "env_logger",
  "include_bytes_aligned",
+ "indexmap",
  "log",
  "parlex",
  "parlex-gen",
@@ -594,9 +605,9 @@ dependencies = [
 
 [[package]]
 name = "try-next"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2879f23768a0a4f430eb62ae26dfd8f5791d864ce951e15a8c4cee45090c0c32"
+checksum = "98d89a8a254e909cecf9c1ca18e830818b1b9a1e3b47bcdbca8b9dff4e852b02"
 
 [[package]]
 name = "unicode-ident"

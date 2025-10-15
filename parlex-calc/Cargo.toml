@@ -26,3 +26,6 @@ indexmap.workspace = true
 
 [build-dependencies]
 parlex-gen.workspace = true
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--document-private-items"]

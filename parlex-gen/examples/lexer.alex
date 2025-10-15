@@ -4,15 +4,15 @@ DEC       = [0-9]
 ALPHA     = [A-Za-z_]
 ALNUM     = [A-Za-z0-9_]
 INT       = {{DEC}}+
-ID        = {{ALPHA}}{{ALNUM}}* 
+ID        = {{ALPHA}}{{ALNUM}}*
 OPER      = [=+\-*/();]
 
-SkipWS: <Expr> {{WS}}               
+SkipWS: <Expr> {{WS}}
 NewLine: <Expr> {{NL}}
 OperSym: <Expr> {{OPER}}
 Ident: <Expr> {{ID}}
-Integer: <Expr> {{INT}} 
-CommentStart: <Expr, Comment> /\*   
+Integer: <Expr> {{INT}}
+CommentStart: <Expr, Comment> /\*
 CommentEnd: <Comment> \*/
 CommentChar: <Comment> [^*\r\n]
 CommentNewLine: <Comment> {{NL}}

@@ -12,11 +12,11 @@ and this project adheres to [Semantic Versioning].
 ## [0.2.x] — 2025-10-12
 
 ### 🧩 Changes
-- Updated to depend on **[parlex](https://crates.io/crates/parlex)** `0.2.0`.  
-- No breaking changes were introduced in this crate.  
+- Updated to depend on **[parlex](https://crates.io/crates/parlex)** `0.2.0`.
+- No breaking changes were introduced in this crate.
 
-> The `parlex` `0.2.0` release introduced a fully reworked driver-based API with  
-> composable `TryNextWithContext` sources and enhanced parser/lexer integration.  
+> The `parlex` `0.2.0` release introduced a fully reworked driver-based API with
+> composable `TryNextWithContext` sources and enhanced parser/lexer integration.
 
 
 ## [0.1.x] — 2025-09-17

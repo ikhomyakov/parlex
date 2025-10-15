@@ -1,6 +1,6 @@
 /// Includes the generated lexer definition produced by **`parlex-gen`**’s
 /// [`alex`](https://crates.io/crates/parlex-gen) tool.
-///             
+///
 /// The included file (`lexer_data.rs`) contains the DFA tables, mode definitions,
 /// and rule implementations required for the [`TermLexer`]. It is generated at
 /// build time by the project’s `build.rs` script.
@@ -9,7 +9,7 @@ pub mod lexer_data {
 }
 
 /// Includes the generated SLR parser tables and definitions.
-///             
+///
 /// This file (`parser_data.rs`) is produced by the **parlex-gen** [`aslr`] tool
 /// during the build process. It defines the parsing automaton, rule metadata,
 /// and associated enum types used by the [`TermParser`].
@@ -41,15 +41,15 @@ use try_next::TryNextWithContext;
 ///
 /// # Variants
 ///
-/// - [`CalcError::ParseInt`]:  
+/// - [`CalcError::ParseInt`]:
 ///   Returned when a numeric literal cannot be parsed into an integer,
 ///   typically originating from [`std::num::ParseIntError`].
 ///
-/// - [`CalcError::FromUtf8`]:  
+/// - [`CalcError::FromUtf8`]:
 ///   Returned when the input contains invalid UTF-8 byte sequences and
 ///   cannot be decoded into a [`String`].
 ///
-/// - [`CalcError::SymTab`]:  
+/// - [`CalcError::SymTab`]:
 ///   Wraps an error from the symbol table subsystem ([`SymTabError`]).
 ///
 /// # Example
@@ -151,14 +151,14 @@ where
 ///
 /// # Variants
 ///
-/// - [`TokenValue::None`]:  
+/// - [`TokenValue::None`]:
 ///   Used for tokens that do not carry any extra data (e.g., punctuation, operators).
 ///
-/// - [`TokenValue::Ident(usize)`]:  
-///   Stores the **symbol table index** of an identifier.  
+/// - [`TokenValue::Ident(usize)`]:
+///   Stores the **symbol table index** of an identifier.
 ///   The `usize` refers to an entry in a [`SymTab`].
 ///
-/// - [`TokenValue::Number(i64)`]:  
+/// - [`TokenValue::Number(i64)`]:
 ///   Represents an integer literal value.
 ///
 /// # Example
@@ -206,14 +206,14 @@ pub enum TokenValue {
 ///
 /// # Fields
 ///
-/// - [`token_id`](#structfield.token_id):  
+/// - [`token_id`](#structfield.token_id):
 ///   The category of token (identifier, number, operator, etc.).
 ///
-/// - [`value`](#structfield.value):  
+/// - [`value`](#structfield.value):
 ///   The token’s associated value — for instance, a symbol-table index
 ///   or literal number — stored as a [`TokenValue`].
 ///
-/// - [`line_no`](#structfield.line_no):  
+/// - [`line_no`](#structfield.line_no):
 ///   The 1-based line number where the token appears in the source.
 ///
 /// # Example
@@ -265,12 +265,12 @@ impl Token for CalcToken {
 ///
 /// # State
 ///
-/// - [`comment_level`](#structfield.comment_level):  
+/// - [`comment_level`](#structfield.comment_level):
 ///   Tracks the current nesting level of block comments. Increment on
 ///   comment open (e.g. `/*`) and decrement on comment close (e.g. `*/`).
 ///   Implementations typically skip emitting tokens while `comment_level > 0`.
 ///
-/// - [`_marker`](#structfield._marker):  
+/// - [`_marker`](#structfield._marker):
 ///   A `PhantomData<I>` marker to bind the generic `I` without storing a value.
 ///
 /// # Associated Types (via `LexerDriver`)
@@ -578,10 +578,10 @@ where
     /// # End of Input
     ///
     /// When the lexer reaches the end of the input stream, it will typically
-    /// emit a final [`TokenID::End`] token before returning `None`.  
+    /// emit a final [`TokenID::End`] token before returning `None`.
     ///
     /// This explicit *End* token is expected by the **Parlex parser** to
-    /// signal successful termination of a complete parsing unit.  
+    /// signal successful termination of a complete parsing unit.
     /// Consumers should treat this token as a logical *end-of-sentence* or
     /// *end-of-expression* marker, depending on the grammar.
     ///
@@ -619,16 +619,16 @@ where
 ///
 /// # Associated Types
 ///
-/// - `ParserData = ParData`:  
+/// - `ParserData = ParData`:
 ///   Generated parser metadata containing grammar rules, production IDs,
 ///   and ambiguity identifiers.
-/// - `Token = CalcToken`:  
+/// - `Token = CalcToken`:
 ///   The token type produced by the lexer and consumed by this parser.
-/// - `Parser = Parser<I, Self>`:  
+/// - `Parser = Parser<I, Self>`:
 ///   The parser engine parameterized by this driver.
-/// - `Error = CalcError`:  
+/// - `Error = CalcError`:
 ///   Unified error type propagated during parsing.
-/// - `Context = I::Context`:  
+/// - `Context = I::Context`:
 ///   Externally supplied context, such as a [`SymTab`].
 ///
 /// # Responsibilities
@@ -912,7 +912,7 @@ where
 /// # Empty Statements
 ///
 /// The calculator grammar also accepts an *empty* statement, which is returned
-/// as a token with [`TokenValue::None`].  
+/// as a token with [`TokenValue::None`].
 /// This occurs, for example, when the last statement in the input is terminated
 /// by a semicolon (`;`) but followed by no further expression. In that case:
 ///
@@ -946,7 +946,7 @@ where
 /// ```
 
 /// # Example
-///     
+///
 /// ```rust
 /// # use parlex_calc::{CalcToken, CalcParser, IterInput, SymTab, TokenID, TokenValue};
 /// # use try_next::TryNextWithContext;

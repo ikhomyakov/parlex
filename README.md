@@ -88,7 +88,7 @@ This crate demonstrates the full workflow of defining, generating, and running a
 
 ```rust
 use parlex_calc::{CalcParser, SymTab};
-use try_next::{TryNextWithContext, IterInput};
+use try_next::{IterInput, TryNextWithContext};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut symtab = SymTab::new();

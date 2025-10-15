@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning].
 [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
 
 
+## [0.3.x] — 2025-10-15
+
+### ⚠️  Breaking Changes
+
+This release introduces a **new type parameter `C` (context)** to the core [`Lexer`] and [`Parser`] structs.  
+The change was driven by the upgrade to **[`try-next`] version 0.4.0**, which refined the `TryNextWithContext` trait to make the context type (`C`) explicit and generic:
+
+- **`Lexer<I, D>` → `Lexer<I, D, C>`**
+- **`Parser<I, D>` → `Parser<I, D, C>`**
+
+[`try-next`]: https://crates.io/crates/try-next
+
+
 ## [0.2.x] — 2025-10-12
 
 ### ⚠️  Breaking Changes

@@ -403,7 +403,7 @@ where
 ///
 /// ```rust
 /// # use parlex_calc::{CalcToken, CalcParser, SymTab, TokenID, TokenValue};
-/// # use try_next::{TryNextWithContext, IterInput};
+/// # use try_next::{IterInput, TryNextWithContext};
 /// let mut symtab = SymTab::new();
 /// let input = IterInput::from("hello = 1;\n foo =\n 5 + 3 * 2;\n (world + hello + 10) * -2;\n\n1000 - - -123".bytes());
 /// let mut parser = CalcParser::try_new(input).unwrap();

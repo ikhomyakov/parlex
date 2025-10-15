@@ -122,7 +122,6 @@ impl Token for CalcToken {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use parlex::Token as _; // bring trait methods into scope
 
     #[test]
     fn token_value_number_extraction_with_let_else() {

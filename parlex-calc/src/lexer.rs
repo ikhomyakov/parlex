@@ -283,7 +283,7 @@ where
 ///
 /// ```rust
 /// # use parlex_calc::{CalcToken, CalcLexer, SymTab, TokenID, TokenValue};
-/// # use try_next::{TryNextWithContext, IterInput};
+/// # use try_next::{IterInput, TryNextWithContext};
 /// let mut symtab = SymTab::new();
 /// let input = IterInput::from("hello\n +\n world\n\n123".bytes());
 /// let mut lexer = CalcLexer::try_new(input).unwrap();

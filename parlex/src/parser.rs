@@ -303,10 +303,10 @@ pub struct ParserStats {
 ///
 /// [`ParserDriver`]: crate::ParserDriver
 /// [`TryNextWithContext`]: crate::TryNextWithContext
-pub struct Parser<I, D>
+pub struct Parser<I, D, C>
 where
-    I: TryNextWithContext<Item = D::Token, Context = D::Context>,
-    D: ParserDriver<Parser = Parser<I, D>>,
+    I: TryNextWithContext<C, Item = D::Token>,
+    D: ParserDriver<Parser = Parser<I, D, C>>,
 {
     /// The parser driver responsible for conflict (ambiguity) resolution and
     /// production rule reduction.
@@ -335,10 +335,10 @@ where
 /// callback to resolve conflicts and reduce productions.
 ///
 /// [`Parser`]: crate::Parser
-impl<I, D> Parser<I, D>
+impl<I, D, C> Parser<I, D, C>
 where
-    I: TryNextWithContext<Item = D::Token, Context = D::Context>,
-    D: ParserDriver<Parser = Parser<I, D>>,
+    I: TryNextWithContext<C, Item = D::Token>,
+    D: ParserDriver<Parser = Parser<I, D, C>>,
 {
     /// Constructs a new [`Parser`] from the given lexer and driver.
     ///
@@ -521,14 +521,13 @@ pub type Action<D> = ParserAction<
 /// Provides context-aware advancement of the parser.
 ///
 /// [`TryNextWithContext`]: crate::TryNextWithContext
-impl<I, D> TryNextWithContext for Parser<I, D>
+impl<I, D, C> TryNextWithContext<C> for Parser<I, D, C>
 where
-    I: TryNextWithContext<Item = D::Token, Context = D::Context>,
-    D: ParserDriver<Parser = Parser<I, D>>,
+    I: TryNextWithContext<C, Item = D::Token>,
+    D: ParserDriver<Parser = Parser<I, D, C>, Context = C>,
 {
     type Item = D::Token;
     type Error = ParserError<I::Error, D::Error, D::Token>;
-    type Context = D::Context;
 
     /// Attempts to parse the input and produce the next reduced (accepted) token.
     ///
@@ -536,7 +535,7 @@ where
     #[inline]
     fn try_next_with_context(
         &mut self,
-        context: &mut Self::Context,
+        context: &mut C,
     ) -> Result<Option<Self::Item>, Self::Error> {
         self.states.clear();
         self.tokens.clear();
@@ -670,13 +669,13 @@ mod tests {
 
     impl<I> LexerDriver for XLexerDriver<I>
     where
-        I: TryNextWithContext<Item = u8, Context = String>,
+        I: TryNextWithContext<String, Item = u8>,
     {
         type LexerData = LexData;
         type Token = XToken;
-        type Lexer = Lexer<I, Self>;
+        type Lexer = Lexer<I, Self, String>;
         type Error = std::convert::Infallible;
-        type Context = I::Context;
+        type Context = String;
 
         fn action(
             &mut self,
@@ -695,20 +694,23 @@ mod tests {
 
     struct XLexer<I>
     where
-        I: TryNextWithContext<Item = u8, Context = String>,
+        I: TryNextWithContext<String, Item = u8>,
     {
-        lexer: Lexer<I, XLexerDriver<I>>,
+        lexer: Lexer<I, XLexerDriver<I>, String>,
     }
 
     impl<I> XLexer<I>
     where
-        I: TryNextWithContext<Item = u8, Context = String>,
+        I: TryNextWithContext<String, Item = u8>,
     {
         fn try_new(
             input: I,
         ) -> Result<
             Self,
-            LexerError<<I as TryNextWithContext>::Error, <XLexerDriver<I> as LexerDriver>::Error>,
+            LexerError<
+                <I as TryNextWithContext<String>>::Error,
+                <XLexerDriver<I> as LexerDriver>::Error,
+            >,
         > {
             let driver = XLexerDriver {
                 _marker: std::marker::PhantomData,
@@ -717,32 +719,32 @@ mod tests {
             Ok(Self { lexer })
         }
     }
-    impl<I> TryNextWithContext for XLexer<I>
+    impl<I> TryNextWithContext<String> for XLexer<I>
     where
-        I: TryNextWithContext<Item = u8, Context = String>,
+        I: TryNextWithContext<String, Item = u8>,
     {
         type Item = XToken;
-        type Error =
-            LexerError<<I as TryNextWithContext>::Error, <XLexerDriver<I> as LexerDriver>::Error>;
-        type Context = I::Context;
+        type Error = LexerError<
+            <I as TryNextWithContext<String>>::Error,
+            <XLexerDriver<I> as LexerDriver>::Error,
+        >;
 
         fn try_next_with_context(
             &mut self,
-            context: &mut I::Context,
-        ) -> Result<Option<XToken>, <Self as TryNextWithContext>::Error> {
+            context: &mut String,
+        ) -> Result<Option<XToken>, <Self as TryNextWithContext<String>>::Error> {
             context.push('a');
             self.lexer.try_next_with_context(context)
         }
     }
 
     struct Empty {}
-    impl TryNextWithContext for Empty {
+    impl TryNextWithContext<String> for Empty {
         type Item = u8;
         type Error = std::convert::Infallible;
-        type Context = String;
         fn try_next_with_context(
             &mut self,
-            context: &mut Self::Context,
+            context: &mut String,
         ) -> Result<Option<Self::Item>, Self::Error> {
             context.push('E');
             Ok(None)
@@ -755,18 +757,18 @@ mod tests {
 
     impl<I> ParserDriver for XParserDriver<I>
     where
-        I: TryNextWithContext<Item = XToken, Context = String>,
+        I: TryNextWithContext<String, Item = XToken>,
     {
         type ParserData = ParData;
         type Token = XToken;
-        type Parser = Parser<I, Self>;
+        type Parser = Parser<I, Self, String>;
         type Error = std::convert::Infallible;
-        type Context = I::Context;
+        type Context = String;
 
         fn resolve_ambiguity(
             &mut self,
             _parser: &mut Self::Parser,
-            _context: &mut Self::Context,
+            _context: &mut String,
             _ambig: <Self::ParserData as ParserData>::AmbigID,
             _tok2: &Self::Token,
         ) -> Result<ParserAction<StateID, ProdID, AmbigID>, Self::Error> {
@@ -776,7 +778,7 @@ mod tests {
         fn reduce(
             &mut self,
             parser: &mut Self::Parser,
-            context: &mut Self::Context,
+            context: &mut String,
             prod_id: <Self::ParserData as ParserData>::ProdID,
             token: &Self::Token,
         ) -> Result<(), Self::Error> {
@@ -801,14 +803,14 @@ mod tests {
 
     struct XParser<I>
     where
-        I: TryNextWithContext<Item = u8, Context = String>,
+        I: TryNextWithContext<String, Item = u8>,
     {
-        parser: Parser<XLexer<I>, XParserDriver<XLexer<I>>>,
+        parser: Parser<XLexer<I>, XParserDriver<XLexer<I>>, String>,
     }
 
     impl<I> XParser<I>
     where
-        I: TryNextWithContext<Item = u8, Context = String>,
+        I: TryNextWithContext<String, Item = u8>,
     {
         fn try_new(
             input: I,
@@ -816,7 +818,7 @@ mod tests {
             Self,
             ParserError<
                 LexerError<
-                    <I as TryNextWithContext>::Error,
+                    <I as TryNextWithContext<String>>::Error,
                     <XLexerDriver<I> as LexerDriver>::Error,
                 >,
                 <XParserDriver<XLexer<I>> as ParserDriver>::Error,
@@ -831,22 +833,24 @@ mod tests {
             Ok(Self { parser })
         }
     }
-    impl<I> TryNextWithContext for XParser<I>
+    impl<I> TryNextWithContext<String> for XParser<I>
     where
-        I: TryNextWithContext<Item = u8, Context = String>,
+        I: TryNextWithContext<String, Item = u8>,
     {
         type Item = XToken;
         type Error = ParserError<
-            LexerError<<I as TryNextWithContext>::Error, <XLexerDriver<I> as LexerDriver>::Error>,
+            LexerError<
+                <I as TryNextWithContext<String>>::Error,
+                <XLexerDriver<I> as LexerDriver>::Error,
+            >,
             <XParserDriver<XLexer<I>> as ParserDriver>::Error,
             XToken,
         >;
-        type Context = I::Context;
 
         fn try_next_with_context(
             &mut self,
-            context: &mut I::Context,
-        ) -> Result<Option<XToken>, <Self as TryNextWithContext>::Error> {
+            context: &mut String,
+        ) -> Result<Option<XToken>, <Self as TryNextWithContext<String>>::Error> {
             context.push('b');
             self.parser.try_next_with_context(context)
         }

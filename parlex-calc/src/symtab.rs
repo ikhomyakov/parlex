@@ -18,8 +18,8 @@
 //! ```
 
 use indexmap::{IndexMap, map::Entry};
-use thiserror::Error;
 use smartstring::alias::String;
+use thiserror::Error;
 
 /// Errors that can occur when operating on a [`SymTab`].
 #[derive(Debug, Error)]
@@ -223,4 +223,3 @@ mod tests {
         assert_eq!(seen.len(), 100);
     }
 }
-

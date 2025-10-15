@@ -605,9 +605,7 @@ dependencies = [
 
 [[package]]
 name = "try-next"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98d89a8a254e909cecf9c1ca18e830818b1b9a1e3b47bcdbca8b9dff4e852b02"
+version = "0.4.0"
 
 [[package]]
 name = "unicode-ident"

@@ -86,60 +86,6 @@ pub enum CalcError {
     SymTab(#[from] SymTabError),
 }
 
-/// An input adapter that wraps any iterator and provides a `TryNextWithContext`
-/// interface, automatically fusing the iterator so it never yields items
-/// after returning `None` once.
-///
-/// # Type Parameters
-///
-/// - `I`: The underlying iterator type. It can be any `Iterator`.
-/// - `C`: The *context* type, which is passed by mutable reference to each
-///   `try_next_with_context` call.
-pub struct IterInput<I, C>
-where
-    I: Iterator,
-{
-    /// The underlying fused iterator.
-    iter: Fuse<I>,
-
-    /// Marker to make the type invariant in `C` and tie its lifetime logically
-    /// to the context without owning it.
-    _marker: PhantomData<fn(C)>,
-}
-
-impl<I, C> IterInput<I, C>
-where
-    I: Iterator,
-{
-    /// Creates a new `IterInput` from any iterator.
-    ///
-    /// The iterator is automatically fused internally, so that once it returns
-    /// `None`, all further `next()` calls will also return `None`.
-    pub fn from(iter: I) -> Self {
-        Self {
-            iter: iter.fuse(),
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<I, C> TryNextWithContext for IterInput<I, C>
-where
-    I: Iterator,
-{
-    type Item = I::Item;
-    type Error = Infallible;
-    type Context = C;
-
-    #[inline]
-    fn try_next_with_context(
-        &mut self,
-        _context: &mut Self::Context,
-    ) -> Result<Option<Self::Item>, Self::Error> {
-        Ok(self.iter.next())
-    }
-}
-
 /// Represents the value carried by a lexical token.
 ///
 /// Each token in the lexer may carry optional data depending on its kind.
@@ -307,7 +253,7 @@ pub struct CalcLexerDriver<I> {
 
 impl<I> LexerDriver for CalcLexerDriver<I>
 where
-    I: TryNextWithContext<Item = u8, Context = SymTab>,
+    I: TryNextWithContext<SymTab, Item = u8>,
 {
     /// Rule identifiers and metadata produced by the lexer.
     type LexerData = LexData;
@@ -316,13 +262,13 @@ where
     type Token = CalcToken;
 
     /// Concrete lexer type parameterized by input and driver.
-    type Lexer = Lexer<I, Self>;
+    type Lexer = Lexer<I, Self, SymTab>;
 
     /// Unified error type returned by actions.
     type Error = CalcError;
 
     /// Externally supplied context available to actions (symbol table).
-    type Context = I::Context;
+    type Context = SymTab;
 
     /// Handles a single lexer rule match.
     ///
@@ -507,8 +453,8 @@ where
 /// # Example
 ///
 /// ```rust
-/// # use parlex_calc::{CalcToken, CalcLexer, IterInput, SymTab, TokenID, TokenValue};
-/// # use try_next::TryNextWithContext;
+/// # use parlex_calc::{CalcToken, CalcLexer, SymTab, TokenID, TokenValue};
+/// # use try_next::{TryNextWithContext, IterInput};
 /// let mut symtab = SymTab::new();
 /// let input = IterInput::from("hello\n +\n world\n\n123".bytes());
 /// let mut lexer = CalcLexer::try_new(input).unwrap();
@@ -518,16 +464,16 @@ where
 /// ```
 pub struct CalcLexer<I>
 where
-    I: TryNextWithContext<Item = u8, Context = SymTab>,
+    I: TryNextWithContext<SymTab, Item = u8>,
 {
     /// The underlying DFA/engine that drives tokenization, parameterized by the
     /// input `I` and the driver that executes rule actions.
-    lexer: Lexer<I, CalcLexerDriver<I>>,
+    lexer: Lexer<I, CalcLexerDriver<I>, SymTab>,
 }
 
 impl<I> CalcLexer<I>
 where
-    I: TryNextWithContext<Item = u8, Context = SymTab>,
+    I: TryNextWithContext<SymTab, Item = u8>,
 {
     /// Constructs a new calculator lexer over the provided input stream.
     ///
@@ -545,7 +491,10 @@ where
         input: I,
     ) -> Result<
         Self,
-        LexerError<<I as TryNextWithContext>::Error, <CalcLexerDriver<I> as LexerDriver>::Error>,
+        LexerError<
+            <I as TryNextWithContext<SymTab>>::Error,
+            <CalcLexerDriver<I> as LexerDriver>::Error,
+        >,
     > {
         let driver = CalcLexerDriver {
             comment_level: 0,
@@ -555,19 +504,18 @@ where
         Ok(Self { lexer })
     }
 }
-impl<I> TryNextWithContext for CalcLexer<I>
+impl<I> TryNextWithContext<SymTab> for CalcLexer<I>
 where
-    I: TryNextWithContext<Item = u8, Context = SymTab>,
+    I: TryNextWithContext<SymTab, Item = u8>,
 {
     /// Tokens produced by this lexer.
     type Item = CalcToken;
 
     /// Unified error type.
-    type Error =
-        LexerError<<I as TryNextWithContext>::Error, <CalcLexerDriver<I> as LexerDriver>::Error>;
-
-    /// External context available while lexing (a [`SymTab`]).
-    type Context = I::Context;
+    type Error = LexerError<
+        <I as TryNextWithContext<SymTab>>::Error,
+        <CalcLexerDriver<I> as LexerDriver>::Error,
+    >;
 
     /// Advances the lexer and returns the next token, or `None` at end of input.
     ///
@@ -593,8 +541,8 @@ where
     /// Once all input has been consumed, the lexer returns `None`.
     fn try_next_with_context(
         &mut self,
-        context: &mut I::Context,
-    ) -> Result<Option<CalcToken>, <Self as TryNextWithContext>::Error> {
+        context: &mut SymTab,
+    ) -> Result<Option<CalcToken>, <Self as TryNextWithContext<SymTab>>::Error> {
         self.lexer.try_next_with_context(context)
     }
 }
@@ -674,7 +622,7 @@ pub struct CalcParserDriver<I> {
 
 impl<I> ParserDriver for CalcParserDriver<I>
 where
-    I: TryNextWithContext<Item = CalcToken, Context = SymTab>,
+    I: TryNextWithContext<SymTab, Item = CalcToken>,
 {
     /// Parser metadata generated from the calculator grammar.
     type ParserData = ParData;
@@ -683,13 +631,13 @@ where
     type Token = CalcToken;
 
     /// Concrete parser engine type.
-    type Parser = Parser<I, Self>;
+    type Parser = Parser<I, Self, SymTab>;
 
     /// Error type for semantic or parsing failures.
     type Error = CalcError;
 
     /// Context (symbol table or shared state).
-    type Context = I::Context;
+    type Context = SymTab;
 
     /// Resolves grammar ambiguities when multiple parse actions are valid.
     ///
@@ -935,8 +883,8 @@ where
 /// # Example
 ///
 /// ```rust
-/// # use parlex_calc::{CalcToken, CalcParser, IterInput, SymTab, TokenID, TokenValue};
-/// # use try_next::TryNextWithContext;
+/// # use parlex_calc::{CalcToken, CalcParser, SymTab, TokenID, TokenValue};
+/// # use try_next::{TryNextWithContext, IterInput};
 /// let mut symtab = SymTab::new();
 /// let input = IterInput::from("hello = 1;\n foo =\n 5 + 3 * 2;\n (world + hello + 10) * -2;\n\n1000 - - -123".bytes());
 /// let mut parser = CalcParser::try_new(input).unwrap();
@@ -948,8 +896,8 @@ where
 /// # Example
 ///
 /// ```rust
-/// # use parlex_calc::{CalcToken, CalcParser, IterInput, SymTab, TokenID, TokenValue};
-/// # use try_next::TryNextWithContext;
+/// # use parlex_calc::{CalcToken, CalcParser, SymTab, TokenID, TokenValue};
+/// # use try_next::{TryNextWithContext, IterInput};
 /// let mut symtab = SymTab::new();
 /// let input = IterInput::from("hello = 1;\n 1 + 2;\n (world + hello + 10) * -2;\n\n1000 - - -123".bytes());
 /// let mut parser = CalcParser::try_new(input).unwrap();
@@ -958,14 +906,14 @@ where
 /// ```
 pub struct CalcParser<I>
 where
-    I: TryNextWithContext<Item = u8, Context = SymTab>,
+    I: TryNextWithContext<SymTab, Item = u8>,
 {
-    parser: Parser<CalcLexer<I>, CalcParserDriver<CalcLexer<I>>>,
+    parser: Parser<CalcLexer<I>, CalcParserDriver<CalcLexer<I>>, SymTab>,
 }
 
 impl<I> CalcParser<I>
 where
-    I: TryNextWithContext<Item = u8, Context = SymTab>,
+    I: TryNextWithContext<SymTab, Item = u8>,
 {
     pub fn try_new(
         input: I,
@@ -973,7 +921,7 @@ where
         Self,
         ParserError<
             LexerError<
-                <I as TryNextWithContext>::Error,
+                <I as TryNextWithContext<SymTab>>::Error,
                 <CalcLexerDriver<I> as LexerDriver>::Error,
             >,
             <CalcParserDriver<CalcLexer<I>> as ParserDriver>::Error,
@@ -988,30 +936,32 @@ where
         Ok(Self { parser })
     }
 }
-impl<I> TryNextWithContext for CalcParser<I>
+impl<I> TryNextWithContext<SymTab> for CalcParser<I>
 where
-    I: TryNextWithContext<Item = u8, Context = SymTab>,
+    I: TryNextWithContext<SymTab, Item = u8>,
 {
     type Item = CalcToken;
     type Error = ParserError<
-        LexerError<<I as TryNextWithContext>::Error, <CalcLexerDriver<I> as LexerDriver>::Error>,
+        LexerError<
+            <I as TryNextWithContext<SymTab>>::Error,
+            <CalcLexerDriver<I> as LexerDriver>::Error,
+        >,
         <CalcParserDriver<CalcLexer<I>> as ParserDriver>::Error,
         CalcToken,
     >;
-    type Context = I::Context;
 
     fn try_next_with_context(
         &mut self,
-        context: &mut I::Context,
-    ) -> Result<Option<CalcToken>, <Self as TryNextWithContext>::Error> {
+        context: &mut SymTab,
+    ) -> Result<Option<CalcToken>, <Self as TryNextWithContext<SymTab>>::Error> {
         self.parser.try_next_with_context(context)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{CalcLexer, CalcParser, CalcToken, IterInput, SymTab, TokenID, TokenValue};
-    use try_next::TryNextWithContext;
+    use crate::{CalcLexer, CalcParser, CalcToken, SymTab, TokenID, TokenValue};
+    use try_next::{IterInput, TryNextWithContext};
 
     #[test]
     fn calc_lexer_1() {

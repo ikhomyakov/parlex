@@ -11,10 +11,10 @@
 //! [`Arena`]: arena_terms::Arena
 
 use clap::{Parser as ClapParser, Subcommand};
-use parlex_calc::{CalcParser, IterInput, SymTab};
+use parlex_calc::{CalcParser, SymTab};
 use smartstring::alias::String;
 use std::io::Read;
-use try_next::TryNextWithContext;
+use try_next::{IterInput, TryNextWithContext};
 
 #[derive(ClapParser, Debug)]
 #[command(version, about, long_about = None)]
@@ -27,15 +27,11 @@ struct Args {
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// Parses terms
-    Parse {
-    },
+    Parse {},
 }
 
 fn open_input() -> std::io::Result<impl Iterator<Item = u8>> {
-    let iter = std::io::stdin()
-        .lock()
-        .bytes()
-        .map(Result::unwrap);
+    let iter = std::io::stdin().lock().bytes().map(Result::unwrap);
     Ok(iter)
 }
 
@@ -47,8 +43,7 @@ fn main() {
     match args.command {
         Commands::Parse {} => {
             let mut symtab = SymTab::new();
-            let input =
-                IterInput::from(open_input().expect("can't open stdin"));
+            let input = IterInput::from(open_input().expect("can't open stdin"));
             let mut parser = CalcParser::try_new(input).expect("can't create parser");
             let toks = parser
                 .try_collect_with_context(&mut symtab)

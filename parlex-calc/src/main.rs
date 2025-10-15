@@ -1,18 +1,54 @@
-//! Command-line interface (CLI) for the parlex-calc
+//! # Command-Line Interface (CLI) for `parlex-calc`
 //!
-//! This binary wraps the [`CalcParser`] and exposes a simple command-line interface
-//! for parsing Prolog-like terms backed by an [`Arena`] bump-allocator.
-//! It allows reading term input from standard input or files, parsing them
-//! into compact arena-allocated term representations, and printing or inspecting
-//! the results.
+//! This binary provides a lightweight interactive interface for the calculator
+//! engine defined in the `parlex-calc` crate.
 //!
-//! [`TermParser`]: arena_terms_parser::parser::TermParser
-//! [`parser_oper_defs`]: arena_terms_parser::parser::parser_oper_defs
-//! [`Arena`]: arena_terms::Arena
+//! It wraps the [`CalcParser`] and uses a [`SymTab`] as an evaluation context,
+//! allowing users to parse and evaluate arithmetic expressions from **standard
+//! input** or from **files** (via redirected input). Results are printed for
+//! inspection and debugging purposes.
+//!
+//! ## Overview
+//! - Reads UTF-8 input from standard input (`stdin`).
+//! - Tokenizes and parses expressions using [`CalcParser`].
+//! - Evaluates statements (assignments, arithmetic expressions, etc.).
+//! - Dumps both the symbol table (`SymTab`) and parsed results to the console.
+//!
+//! ## Example Usage
+//! ```bash
+//! $ echo "x = 2; y = x * 5 + 3; y - 1;" | cargo run -- parse
+//! ```
+//!
+//! Output (debug format):
+//! ```text
+//! [src/main.rs:47] &symtab = SymTab { entries: ["x", "y"], values: [2, 13] }
+//! [src/main.rs:48] &toks = [
+//!     CalcToken { token_id: Stat, line_no: 1, value: Number(2) },
+//!     CalcToken { token_id: Stat, line_no: 1, value: Number(13) },
+//!     CalcToken { token_id: Stat, line_no: 1, value: Number(12) },
+//!     CalcToken { token_id: Stat, line_no: 1, value: None },
+//! ]
+//! ```
+//!
+//! ## Command Structure
+//!
+//! | Command | Description              |
+//! |----------|--------------------------|
+//! | `parse`  | Reads input and parses it |
+//!
+//! ## Implementation Notes
+//! - Uses [`clap`] for argument parsing.
+//! - Leverages [`IterInput`] from `try_next` to stream bytes from `stdin`.
+//! - Relies on [`env_logger`] for structured test-friendly logging.
+//!
+//! [`CalcParser`]: parlex_calc::CalcParser
+//! [`SymTab`]: parlex_calc::SymTab
+//! [`clap`]: https://crates.io/crates/clap
+//! [`env_logger`]: https://crates.io/crates/env_logger
+//! [`IterInput`]: try_next::IterInput
 
 use clap::{Parser as ClapParser, Subcommand};
 use parlex_calc::{CalcParser, SymTab};
-use smartstring::alias::String;
 use std::io::Read;
 use try_next::{IterInput, TryNextWithContext};
 

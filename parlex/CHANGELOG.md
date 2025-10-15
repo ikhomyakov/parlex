@@ -18,7 +18,7 @@ We completely reworked the **Parlex API** in this release — thank you for your
 This version refactors the public API, documentation, and trait design to make lexer and parser integration **more consistent, extensible, and ergonomic**.
 
 The two core design ideas introduced in this release are:
-1. **Composable `TryNextWithContext` sources** — Parlex now uses the `try-next` crate to generalize input byte sources, lexers and parsers.
+1. **Composable `TryNextWithContext<C>` sources** — Parlex now uses the `try-next` crate to generalize input byte sources, lexers and parsers.
 2. **Driver-based architecture** — users now implement *lexer* and *parser drivers*, which encapsulate all user-defined logic.
    These drivers integrate seamlessly with the generic DFA and SLR automata provided by the Parlex core library.
 

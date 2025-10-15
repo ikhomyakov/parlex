@@ -1,5 +1,3 @@
-//! # symtab
-//!
 //! A minimal, flat symbol table built on [`indexmap::IndexMap`].
 //!
 //! This table assigns each unique string name a stable integer index.

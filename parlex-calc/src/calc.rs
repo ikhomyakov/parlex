@@ -207,7 +207,7 @@ impl Token for CalcToken {
 ///
 /// The driver is generic over an input source `I` that yields bytes (`u8`)
 /// and supports contextual access to a symbol table via
-/// [`TryNextWithContext<Item = u8, Context = SymTab>`].
+/// [`TryNextWithContext<SymTab, Item = u8>`].
 ///
 /// # State
 ///
@@ -563,7 +563,7 @@ where
 ///
 /// - `I`: The input source (the lexer) that yields [`CalcToken`]s and maintains a
 ///   contextual [`SymTab`]. Must implement
-///   [`TryNextWithContext<Item = CalcToken, Context = SymTab>`].
+///   [`TryNextWithContext<SymTab, Item = CalcToken>`].
 ///
 /// # Associated Types
 ///
@@ -845,7 +845,7 @@ where
 /// # Input / Output
 ///
 /// - **Input**: any byte stream `I` implementing
-///   [`TryNextWithContext<Item = u8, Context = SymTab>`].
+///   [`TryNextWithContext<SymTab, Item = u8>`].
 /// - **Output**: completed parsing units as [`CalcToken`] values (typically
 ///   grammar-level results like expressions/statements).
 ///

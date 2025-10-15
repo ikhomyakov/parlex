@@ -211,6 +211,7 @@ pub struct LexerStats {
 /// - `I`: Input source that yields bytes via [`TryNextWithContext`].
 /// - `D`: The [`LexerDriver`] implementation that defines how tokens are
 ///   produced and modes are managed.
+/// - `C`: Context
 ///
 /// [`LexerDriver`]: crate::LexerDriver
 /// [`TryNextWithContext`]: crate::TryNextWithContext

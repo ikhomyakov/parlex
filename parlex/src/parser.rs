@@ -300,6 +300,7 @@ pub struct ParserStats {
 /// - `I`: Input source that yields tokens via [`TryNextWithContext`] (the lexer).
 /// - `D`: The [`ParserDriver`] implementation that provides user-defined logic
 ///    for conflict resolution and production reduction.
+/// - `C`: Context
 ///
 /// [`ParserDriver`]: crate::ParserDriver
 /// [`TryNextWithContext`]: crate::TryNextWithContext

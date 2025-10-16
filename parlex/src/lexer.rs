@@ -211,13 +211,14 @@ pub struct LexerStats {
 /// - `I`: Input source that yields bytes via [`TryNextWithContext`].
 /// - `D`: The [`LexerDriver`] implementation that defines how tokens are
 ///   produced and modes are managed.
+/// - `C`: Context
 ///
 /// [`LexerDriver`]: crate::LexerDriver
 /// [`TryNextWithContext`]: crate::TryNextWithContext
-pub struct Lexer<I, D>
+pub struct Lexer<I, D, C>
 where
-    I: TryNextWithContext<Item = u8, Context = D::Context>,
-    D: LexerDriver<Lexer = Lexer<I, D>>,
+    I: TryNextWithContext<C, Item = u8>,
+    D: LexerDriver<Lexer = Lexer<I, D, C>>,
 {
     /// Lexer driver that handles token emission and mode transitions.
     /// Temporarily taken out of the lexer during `action` invocations.
@@ -268,10 +269,10 @@ where
 /// callback to emit tokens and handle mode changes.
 ///
 /// [`Lexer`]: crate::Lexer
-impl<I, D> Lexer<I, D>
+impl<I, D, C> Lexer<I, D, C>
 where
-    I: TryNextWithContext<Item = u8, Context = D::Context>,
-    D: LexerDriver<Lexer = Lexer<I, D>>,
+    I: TryNextWithContext<C, Item = u8>,
+    D: LexerDriver<Lexer = Lexer<I, D, C>>,
 {
     /// Constructs a new [`Lexer`] from the given input source and driver.
     ///
@@ -419,7 +420,7 @@ where
     /// [`LexerStats`]: crate::LexerStats
     #[inline]
     fn get_next_byte(
-        context: &mut I::Context,
+        context: &mut C,
         unread: &mut Vec<u8>,
         input: &mut I,
         stats: &mut LexerStats,
@@ -498,7 +499,7 @@ where
     /// [`TryNextWithContext`]: crate::TryNextWithContext
     fn try_match(
         &mut self,
-        context: &mut I::Context,
+        context: &mut C,
     ) -> Result<Option<PatternID>, LexerError<I::Error, D::Error>> {
         self.stats.matches += 1;
         if !self.accum_flag {
@@ -608,14 +609,13 @@ where
 /// Provides context-aware advancement of the lexer state.
 ///
 /// [`TryNextWithContext`]: crate::TryNextWithContext
-impl<I, D> TryNextWithContext for Lexer<I, D>
+impl<I, D, C> TryNextWithContext<C> for Lexer<I, D, C>
 where
-    I: TryNextWithContext<Item = u8, Context = D::Context>,
-    D: LexerDriver<Lexer = Lexer<I, D>>,
+    I: TryNextWithContext<C, Item = u8>,
+    D: LexerDriver<Lexer = Lexer<I, D, C>, Context = C>,
 {
     type Item = D::Token;
     type Error = LexerError<I::Error, D::Error>;
-    type Context = D::Context;
 
     /// Advances the lexer to produce the next token.
     ///
@@ -643,7 +643,7 @@ where
     #[inline]
     fn try_next_with_context(
         &mut self,
-        context: &mut Self::Context,
+        context: &mut C,
     ) -> Result<Option<Self::Item>, Self::Error> {
         if let Some(t) = self.tokens.pop_front() {
             return Ok(Some(t));
@@ -725,13 +725,13 @@ mod tests {
 
     impl<I> LexerDriver for XLexerDriver<I>
     where
-        I: TryNextWithContext<Item = u8, Context = String>,
+        I: TryNextWithContext<String, Item = u8>,
     {
         type LexerData = LexData;
         type Token = XToken;
-        type Lexer = Lexer<I, Self>;
+        type Lexer = Lexer<I, Self, String>;
         type Error = std::convert::Infallible;
-        type Context = I::Context;
+        type Context = String;
 
         fn action(
             &mut self,
@@ -757,20 +757,23 @@ mod tests {
     }
     struct XLexer<I>
     where
-        I: TryNextWithContext<Item = u8, Context = String>,
+        I: TryNextWithContext<String, Item = u8>,
     {
-        lexer: Lexer<I, XLexerDriver<I>>,
+        lexer: Lexer<I, XLexerDriver<I>, String>,
     }
 
     impl<I> XLexer<I>
     where
-        I: TryNextWithContext<Item = u8, Context = String>,
+        I: TryNextWithContext<String, Item = u8>,
     {
         fn try_new(
             input: I,
         ) -> Result<
             Self,
-            LexerError<<I as TryNextWithContext>::Error, <XLexerDriver<I> as LexerDriver>::Error>,
+            LexerError<
+                <I as TryNextWithContext<String>>::Error,
+                <XLexerDriver<I> as LexerDriver>::Error,
+            >,
         > {
             let driver = XLexerDriver {
                 _marker: std::marker::PhantomData,
@@ -779,32 +782,33 @@ mod tests {
             Ok(Self { lexer })
         }
     }
-    impl<I> TryNextWithContext for XLexer<I>
+    impl<I> TryNextWithContext<String> for XLexer<I>
     where
-        I: TryNextWithContext<Item = u8, Context = String>,
+        I: TryNextWithContext<String, Item = u8>,
     {
         type Item = XToken;
-        type Error =
-            LexerError<<I as TryNextWithContext>::Error, <XLexerDriver<I> as LexerDriver>::Error>;
-        type Context = I::Context;
+        type Error = LexerError<
+            <I as TryNextWithContext<String>>::Error,
+            <XLexerDriver<I> as LexerDriver>::Error,
+        >;
 
         fn try_next_with_context(
             &mut self,
-            context: &mut I::Context,
-        ) -> Result<Option<XToken>, <Self as TryNextWithContext>::Error> {
+            context: &mut String,
+        ) -> Result<Option<XToken>, <Self as TryNextWithContext<String>>::Error> {
             context.push('a');
             self.lexer.try_next_with_context(context)
         }
     }
 
     struct Empty {}
-    impl TryNextWithContext for Empty {
+    impl TryNextWithContext<String> for Empty {
         type Item = u8;
         type Error = std::convert::Infallible;
-        type Context = String;
+
         fn try_next_with_context(
             &mut self,
-            context: &mut Self::Context,
+            context: &mut String,
         ) -> Result<Option<Self::Item>, Self::Error> {
             context.push('e');
             Ok(None)

@@ -31,7 +31,7 @@ Generated lexers and parsers depend on this crate. Users build their own custom 
 **Add to your `Cargo.toml`:**
 ```toml
 [dependencies]
-parlex = "0.1"
+parlex = "0.2"
 ```
 
 ### 🔧 [parlex-gen](./parlex-gen)
@@ -56,7 +56,7 @@ Both generators produce code that uses the `parlex` core library.
 **Add to your `Cargo.toml`:**
 ```toml
 [build-dependencies]
-parlex-gen = "0.1"
+parlex-gen = "0.2"
 ```
 
 ### 🧮 [parlex-calc](./parlex-calc)
@@ -87,8 +87,8 @@ This crate demonstrates the full workflow of defining, generating, and running a
 #### Example
 
 ```rust
-use parlex_calc::{CalcParser, IterInput, SymTab};
-use try_next::TryNextWithContext;
+use parlex_calc::{CalcParser, SymTab};
+use try_next::{IterInput, TryNextWithContext};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut symtab = SymTab::new();

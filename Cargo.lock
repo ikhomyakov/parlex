@@ -349,7 +349,7 @@ checksum = "a4895175b425cb1f87721b59f0f286c2092bd4af812243672510e1ac53e2e0ad"
 
 [[package]]
 name = "parlex"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "env_logger",
@@ -364,7 +364,7 @@ dependencies = [
 
 [[package]]
 name = "parlex-calc"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "env_logger",
@@ -380,7 +380,7 @@ dependencies = [
 
 [[package]]
 name = "parlex-gen"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "chumsky",
@@ -605,9 +605,7 @@ dependencies = [
 
 [[package]]
 name = "try-next"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98d89a8a254e909cecf9c1ca18e830818b1b9a1e3b47bcdbca8b9dff4e852b02"
+version = "0.4.0"
 
 [[package]]
 name = "unicode-ident"

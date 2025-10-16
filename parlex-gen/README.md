@@ -26,14 +26,14 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [build-dependencies]
-parlex-gen = "0.1"
+parlex-gen = "0.2"
 ```
 
 You'll also need the core library:
 
 ```toml
 [dependencies]
-parlex = "0.1"
+parlex = "0.2"
 ```
 
 

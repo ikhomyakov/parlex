@@ -1,3 +1,22 @@
+-- Grammar rules for a simple expression language.
+--
+-- This file defines the context-free grammar (CFG) productions
+-- for a minimal expression language that supports:
+--   - Variable assignments
+--   - Arithmetic expressions (+, -, *, /)
+--   - Unary negation
+--   - Parentheses for grouping
+--
+-- Nonterminals:
+--   - Stat : represents a statement
+--   - Expr : represents an expression
+--
+-- Terminals:
+--   - ident, number, =, +, -, *, /, (, )
+--
+-- The grammar is written in production rule form:
+--   <label>: <Nonterminal> -> <production>
+--
 stat1: Stat ->
 stat2: Stat -> Expr
 stat3: Stat -> ident = Expr

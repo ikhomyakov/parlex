@@ -1,8 +1,32 @@
+-- Token and lexical rule definitions for a simple expression parser.
+-- 
+-- This file defines the lexical structure for an expression grammar.
+-- It specifies tokens for identifiers, numbers, operators, parentheses,
+-- whitespace, comments, etc.
+--
+-- The lexer supports multiple modes:
+--   - <Expr>: main expression parsing state
+--   - <Comment>: handles multi-line comment content
+--   - <*>: matches any state (wildcard)
+--
+
+-- Basic token pattern definitions.
+--
+-- These are reusable regular expression patterns used to define
+-- fundamental token types such as whitespace, newlines, identifiers,
+-- and numbers. They serve as building blocks for later rules.
+--
 WS = [ \t]
 NL = \r?\n
 IDENT = [a-z_][a-z_A-Z0-9]*
 NUMBER = [0-9]+
 
+-- Lexer rules.
+--
+-- Each rule declares the mode(s) in which it is applicable.
+-- These declarations do not cause mode changes; they only limit
+-- where the rule may match.
+--
 Ident: <Expr> {{IDENT}}
 Number: <Expr> {{NUMBER}}
 Semicolon: <Expr> ;
@@ -15,7 +39,7 @@ LeftParen: <Expr> \(
 RightParen: <Expr> \)
 CommentBegin: <Expr, Comment> /\*
 CommentEnd: <Comment> \*/
-CommentChar: <Comment> [^*\r\n]+
+CommentChar: <Comment> [^*/\r\n]+
 NewLine: <*> {{NL}}
 WhiteSpace: <Expr> {{WS}}+
 Error: <*> .

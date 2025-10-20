@@ -22,9 +22,7 @@
 //!   [`TokenValue::None`].
 
 use crate::{CalcLexer, CalcToken, SymTab, TokenID, TokenValue};
-use parlex::{
-    Parser, ParserAction, ParserData, ParserDriver, ParlexError, Token,
-};
+use parlex::{ParlexError, Parser, ParserAction, ParserData, ParserDriver, Token};
 use parser_data::{AmbigID, ParData, ProdID, StateID};
 use std::marker::PhantomData;
 use try_next::TryNextWithContext;
@@ -101,7 +99,11 @@ pub struct CalcParserDriver<I> {
 
 impl<I> ParserDriver for CalcParserDriver<I>
 where
-    I: TryNextWithContext<SymTab, Item = CalcToken, Error: std::error::Error + Send + Sync + 'static>,
+    I: TryNextWithContext<
+            SymTab,
+            Item = CalcToken,
+            Error: std::error::Error + Send + Sync + 'static,
+        >,
 {
     /// Parser metadata generated from the calculator grammar.
     type ParserData = ParData;
@@ -238,7 +240,9 @@ where
                 let TokenValue::Ident(index) = ident.value else {
                     unreachable!()
                 };
-                context.set(index, value).map_err(|e| ParlexError::from_err(e, ident.span()))?; //TODO: fix span
+                context
+                    .set(index, value)
+                    .map_err(|e| ParlexError::from_err(e, ident.span()))?; //TODO: fix span
                 expr.token_id = TokenID::Stat;
                 parser.tokens_push(expr);
             }
@@ -255,7 +259,11 @@ where
                 let TokenValue::Ident(index) = tok.value else {
                     unreachable!()
                 };
-                tok.value = TokenValue::Number(context.get(index).map_err(|e| ParlexError::from_err(e, tok.span()))?);
+                tok.value = TokenValue::Number(
+                    context
+                        .get(index)
+                        .map_err(|e| ParlexError::from_err(e, tok.span()))?,
+                );
                 parser.tokens_push(tok);
             }
             ProdID::Expr3 => {
@@ -408,11 +416,7 @@ impl<I> CalcParser<I>
 where
     I: TryNextWithContext<SymTab, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
 {
-    pub fn try_new(
-        input: I,
-    ) -> Result<
-        Self,
-        ParlexError> {
+    pub fn try_new(input: I) -> Result<Self, ParlexError> {
         let lexer = CalcLexer::try_new(input)?;
         let driver = CalcParserDriver {
             _marker: PhantomData,
@@ -444,8 +448,8 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{CalcParser, CalcToken, SymTab, TokenID, TokenValue};
-    use try_next::{IterInput, TryNextWithContext};
     use parlex::span;
+    use try_next::{IterInput, TryNextWithContext};
 
     #[test]
     fn parses_four_stats() {

@@ -14,7 +14,7 @@
 //! See the crate’s README for additional examples and implementation guidance.
 //!
 //! [`alex`]: https://crates.io/crates/parlex-gen
-use crate::{ParlexError, Span};
+use crate::{LexerCursor, ParlexError, Span};
 use regex_automata::{
     Anchored, HalfMatch, Input as RegexInput,
     dfa::{Automaton, dense},
@@ -190,8 +190,8 @@ where
     /// Acts as the output buffer for tokens emitted by the lexer.
     tokens: VecDeque<D::Token>,
 
-    /// The current span, used for diagnostics.
-    span: Option<Span>,
+    /// The current span and byte position, used for diagnostics.
+    pub cursor: LexerCursor,
 
     /// Statistics collected during lexing.
     pub stats: LexerStats,
@@ -240,13 +240,13 @@ where
             buffer: Vec::new(),
             end_flag: false,
             tokens: VecDeque::new(),
-            span: None,
+            cursor: LexerCursor::new(),
             stats: LexerStats::default(),
         })
     }
 
-    pub fn span(&self) -> Option<Span> {
-        self.span
+    pub fn span(&self) -> Span {
+        self.cursor.span
     }
 
     #[cfg(not(test))]
@@ -314,7 +314,7 @@ where
     pub fn take_str(&mut self) -> Result<String, ParlexError> {
         let bytes = self.take_bytes();
         let s = std::string::String::from_utf8(bytes)
-            .map_err(|e| ParlexError::from_err(e, self.span()))?;
+            .map_err(|e| ParlexError::from_err(e, Some(self.span())))?;
         Ok(s.into())
     }
 
@@ -353,16 +353,29 @@ where
         unread: &mut Vec<u8>,
         input: &mut I,
         stats: &mut LexerStats,
-        span: &Option<Span>,
+        cursor: &mut LexerCursor,
     ) -> Result<Option<u8>, ParlexError> {
         match unread.pop() {
-            Some(b) => Ok(Some(b)),
+            Some(b) => {
+                cursor
+                    .advance(b)
+                    .map_err(|e| ParlexError::from_err(e, Some(cursor.span)))?;
+                Ok(Some(b))
+            }
             None => {
                 let b = input
                     .try_next_with_context(context)
-                    .map_err(|e| ParlexError::from_err(e, *span))?;
-                stats.chars += 1;
-                Ok(b)
+                    .map_err(|e| ParlexError::from_err(e, Some(cursor.span)))?;
+                match b {
+                    Some(b) => {
+                        stats.chars += 1;
+                        cursor
+                            .advance(b)
+                            .map_err(|e| ParlexError::from_err(e, Some(cursor.span)))?;
+                        Ok(Some(b))
+                    }
+                    None => Ok(None),
+                }
             }
         }
     }
@@ -433,7 +446,7 @@ where
         let dfa = &self.dfas[self.mode.into()];
         let mut state = dfa
             .start_state_forward(&RegexInput::new(&[]).anchored(Anchored::Yes))
-            .map_err(|e| ParlexError::from_err(e, self.span()))?;
+            .map_err(|e| ParlexError::from_err(e, Some(self.span())))?;
         log::trace!(
             "START: mode={}, s={}",
             Into::<usize>::into(self.mode),
@@ -448,7 +461,7 @@ where
                 &mut self.unread,
                 &mut self.input,
                 &mut self.stats,
-                &self.span,
+                &mut self.cursor,
             )?;
             match b {
                 Some(b) => {
@@ -485,11 +498,16 @@ where
                                 Some(m) => {
                                     for _ in 0..i - m.offset() + 1 {
                                         match self.buffer.pop() {
-                                            Some(x) => self.unread.push(x),
+                                            Some(b) => {
+                                                self.unread.push(b);
+                                                self.cursor.retreat(b).map_err(|e| {
+                                                    ParlexError::from_err(e, Some(self.span()))
+                                                })?;
+                                            }
                                             None => {
                                                 return Err(ParlexError {
                                                     message: format!("lexer buffer underflow"),
-                                                    span: self.span(),
+                                                    span: Some(self.span()),
                                                 });
                                             }
                                         }
@@ -499,7 +517,7 @@ where
                                 None => {
                                     return Err(ParlexError {
                                         message: format!("lexer error on byte '{}'", b),
-                                        span: self.span(),
+                                        span: Some(self.span()),
                                     });
                                 }
                             }
@@ -531,11 +549,16 @@ where
                 for _ in 0..i - m.offset() {
                     self.stats.unreads += 1;
                     match self.buffer.pop() {
-                        Some(x) => self.unread.push(x),
+                        Some(b) => {
+                            self.unread.push(b);
+                            self.cursor
+                                .retreat(b)
+                                .map_err(|e| ParlexError::from_err(e, Some(self.span())))?;
+                        }
                         None => {
                             return Err(ParlexError {
                                 message: format!("lexer buffer underflow"),
-                                span: self.span(),
+                                span: Some(self.span()),
                             });
                         }
                     }
@@ -687,11 +710,11 @@ mod tests {
                 Rule::Empty => unreachable!(),
                 Rule::A => XToken {
                     token_id: 1,
-                    span: lexer.span(),
+                    span: Some(lexer.span()),
                 }, // <Expr> .
                 Rule::End => XToken {
                     token_id: 2,
-                    span: lexer.span(),
+                    span: Some(lexer.span()),
                 },
             };
             lexer.yield_token(token);

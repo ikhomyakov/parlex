@@ -126,7 +126,7 @@ where
                 let index = context.intern(lexer.take_str()?);
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::Ident,
-                    span: lexer.span(),
+                    span: Some(lexer.span()),
                     value: TokenValue::Ident(index),
                 });
             }
@@ -135,15 +135,19 @@ where
                 let s = lexer.take_str()?;
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::Number,
-                    span: lexer.span(),
-                    value: TokenValue::Number(s.as_str().parse::<i64>().map_err(|e| ParlexError::from_err(e, lexer.span()))?),
+                    span: Some(lexer.span()),
+                    value: TokenValue::Number(
+                        s.as_str()
+                            .parse::<i64>()
+                            .map_err(|e| ParlexError::from_err(e, Some(lexer.span())))?,
+                    ),
                 });
             }
             Rule::Semicolon => {
                 // <Expr> ;
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::End,
-                    span: lexer.span(),
+                    span: Some(lexer.span()),
                     value: TokenValue::None,
                 });
             }
@@ -151,7 +155,7 @@ where
                 // <Expr> =
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::Equals,
-                    span: lexer.span(),
+                    span: Some(lexer.span()),
                     value: TokenValue::None,
                 });
             }
@@ -159,7 +163,7 @@ where
                 // <Expr> \+
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::Plus,
-                    span: lexer.span(),
+                    span: Some(lexer.span()),
                     value: TokenValue::None,
                 });
             }
@@ -167,7 +171,7 @@ where
                 // <Expr> -
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::Minus,
-                    span: lexer.span(),
+                    span: Some(lexer.span()),
                     value: TokenValue::None,
                 });
             }
@@ -175,7 +179,7 @@ where
                 // <Expr> \*
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::Asterisk,
-                    span: lexer.span(),
+                    span: Some(lexer.span()),
                     value: TokenValue::None,
                 });
             }
@@ -183,7 +187,7 @@ where
                 // <Expr> /
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::Slash,
-                    span: lexer.span(),
+                    span: Some(lexer.span()),
                     value: TokenValue::None,
                 });
             }
@@ -191,7 +195,7 @@ where
                 // <Expr> \(
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::LeftParen,
-                    span: lexer.span(),
+                    span: Some(lexer.span()),
                     value: TokenValue::None,
                 });
             }
@@ -199,7 +203,7 @@ where
                 // <Expr> \)
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::RightParen,
-                    span: lexer.span(),
+                    span: Some(lexer.span()),
                     value: TokenValue::None,
                 });
             }
@@ -226,7 +230,7 @@ where
                 // <*> .
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::Error,
-                    span: lexer.span(),
+                    span: Some(lexer.span()),
                     value: TokenValue::None,
                 });
             }
@@ -234,13 +238,13 @@ where
                 if lexer.mode() == Mode::Expr {
                     lexer.yield_token(CalcToken {
                         token_id: TokenID::End,
-                        span: lexer.span(),
+                        span: Some(lexer.span()),
                         value: TokenValue::None,
                     });
                 } else {
                     lexer.yield_token(CalcToken {
                         token_id: TokenID::Error,
-                        span: lexer.span(),
+                        span: Some(lexer.span()),
                         value: TokenValue::None,
                     });
                 }

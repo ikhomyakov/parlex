@@ -62,12 +62,13 @@
 //! - [parlex-gen](https://crates.io/crates/parlex-gen) — Code generation tools (`alex` and `aslr`)
 //! - [arena-terms-parser](https://crates.io/crates/arena-terms-parser) — real-world example using **ALEX** and **ASLR**
 
+mod cursor;
 mod error;
 mod lexer;
 mod parser;
 
-pub use error::{ParlexError, Position, Span};
-
+pub use cursor::{LexerCursor, Position, Span, SpanError};
+pub use error::ParlexError;
 pub use lexer::{Lexer, LexerData, LexerDriver, LexerMode, LexerRule, LexerStats, Token};
 pub use parser::{
     Parser, ParserAction, ParserAmbigID, ParserData, ParserDriver, ParserProdID, ParserStateID,

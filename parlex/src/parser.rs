@@ -586,8 +586,8 @@ where
 mod tests {
     use crate::{
         Lexer, LexerData, LexerDriver, LexerMode, LexerRule, ParlexError, Parser, ParserAction,
-        ParserAmbigID, ParserData, ParserDriver, ParserProdID, ParserStateID, ParserTokenID,
-        span, Span, Token,
+        ParserAmbigID, ParserData, ParserDriver, ParserProdID, ParserStateID, ParserTokenID, Span,
+        Token, span,
     };
     use smartstring::alias::String;
     use std::{convert::Infallible, fmt::Debug};

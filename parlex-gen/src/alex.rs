@@ -150,10 +150,7 @@ pub fn generate<P: AsRef<Path>>(
     writeln!(out, "Copyright (c) 2005-2025 IKH Software, Inc.")?;
     writeln!(out, "*/\n")?;
     writeln!(out, "use include_bytes_aligned::include_bytes_aligned;")?;
-    writeln!(
-        out,
-        "use parlex::{{LexerMode, LexerRule, LexerData}};\n"
-    )?;
+    writeln!(out, "use parlex::{{LexerMode, LexerRule, LexerData}};\n")?;
 
     let mut modes: Vec<_> = modes.iter().filter(|&s| s != "*").collect();
     modes.sort();

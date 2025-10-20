@@ -126,7 +126,7 @@ impl ParlexError {
     /// * Otherwise, it wraps `err.to_string()` into `ParlexError` with the given `span`.
     pub fn from_err<E>(err: E, span: Option<Span>) -> Self
     where
-        E: std::error::Error + Send + Sync + 'static,
+        E: std::fmt::Display + 'static,
     {
         // `Any` is blanket-implemented for all `'static` types, so downcast is OK.
         if let Some(pe) = (&err as &dyn std::any::Any).downcast_ref::<ParlexError>() {

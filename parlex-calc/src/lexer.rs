@@ -82,7 +82,7 @@ pub struct CalcLexerDriver<I> {
 
 impl<I> LexerDriver for CalcLexerDriver<I>
 where
-    I: TryNextWithContext<SymTab, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
+    I: TryNextWithContext<SymTab, Item = u8, Error: std::fmt::Display + 'static>,
 {
     /// Rule identifiers and metadata produced by the lexer generator.
     type LexerData = LexData;
@@ -289,7 +289,7 @@ where
 /// ```
 pub struct CalcLexer<I>
 where
-    I: TryNextWithContext<SymTab, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
+    I: TryNextWithContext<SymTab, Item = u8, Error: std::fmt::Display + 'static>,
 {
     /// The underlying DFA/engine that drives tokenization, parameterized by the
     /// input `I` and the driver that executes rule actions.
@@ -298,7 +298,7 @@ where
 
 impl<I> CalcLexer<I>
 where
-    I: TryNextWithContext<SymTab, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
+    I: TryNextWithContext<SymTab, Item = u8, Error: std::fmt::Display + 'static>,
 {
     /// Constructs a new calculator lexer over the provided input stream.
     ///
@@ -323,7 +323,7 @@ where
 }
 impl<I> TryNextWithContext<SymTab> for CalcLexer<I>
 where
-    I: TryNextWithContext<SymTab, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
+    I: TryNextWithContext<SymTab, Item = u8, Error: std::fmt::Display + 'static>,
 {
     /// Tokens produced by this lexer.
     type Item = CalcToken;

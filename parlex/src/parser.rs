@@ -258,7 +258,7 @@ pub struct ParserStats {
 /// [`TryNextWithContext`]: crate::TryNextWithContext
 pub struct Parser<I, D, C>
 where
-    I: TryNextWithContext<C, Item = D::Token, Error: std::error::Error + Send + Sync + 'static>,
+    I: TryNextWithContext<C, Item = D::Token, Error: std::fmt::Display + 'static>,
     D: ParserDriver<Parser = Parser<I, D, C>>,
 {
     /// The parser driver responsible for conflict (ambiguity) resolution and
@@ -290,7 +290,7 @@ where
 /// [`Parser`]: crate::Parser
 impl<I, D, C> Parser<I, D, C>
 where
-    I: TryNextWithContext<C, Item = D::Token, Error: std::error::Error + Send + Sync + 'static>,
+    I: TryNextWithContext<C, Item = D::Token, Error: std::fmt::Display + 'static>,
     D: ParserDriver<Parser = Parser<I, D, C>>,
 {
     /// Constructs a new [`Parser`] from the given lexer and driver.
@@ -472,7 +472,7 @@ pub type Action<D> = ParserAction<
 /// [`TryNextWithContext`]: crate::TryNextWithContext
 impl<I, D, C> TryNextWithContext<C> for Parser<I, D, C>
 where
-    I: TryNextWithContext<C, Item = D::Token, Error: std::error::Error + Send + Sync + 'static>,
+    I: TryNextWithContext<C, Item = D::Token, Error: std::fmt::Display + 'static>,
     D: ParserDriver<Parser = Parser<I, D, C>, Context = C>,
 {
     type Item = D::Token;

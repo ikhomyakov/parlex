@@ -23,7 +23,6 @@ use regex_automata::{
 use smartstring::alias::String;
 use std::collections::VecDeque;
 use std::fmt::Debug;
-use std::mem;
 use try_next::TryNextWithContext;
 
 /// A trait representing a token in lexical analysis or parsing.
@@ -154,7 +153,7 @@ pub struct LexerStats {
 /// [`TryNextWithContext`]: crate::TryNextWithContext
 pub struct Lexer<I, D, C>
 where
-    I: TryNextWithContext<C, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
+    I: TryNextWithContext<C, Item = u8, Error: std::fmt::Display + 'static>,
     D: LexerDriver<Lexer = Lexer<I, D, C>>,
 {
     /// Lexer driver that handles token emission and mode transitions.
@@ -208,7 +207,7 @@ where
 /// [`Lexer`]: crate::Lexer
 impl<I, D, C> Lexer<I, D, C>
 where
-    I: TryNextWithContext<C, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
+    I: TryNextWithContext<C, Item = u8, Error: std::fmt::Display + 'static>,
     D: LexerDriver<Lexer = Lexer<I, D, C>>,
 {
     /// Constructs a new [`Lexer`] from the given input source and driver.
@@ -307,7 +306,7 @@ where
     #[inline]
     pub fn take_bytes(&mut self) -> Vec<u8> {
         self.accum_flag = false;
-        mem::take(&mut self.buffer)
+        std::mem::take(&mut self.buffer)
     }
 
     /// Takes accumulated bytes from the main buffer and converts them into a UTF-8 string.
@@ -557,7 +556,7 @@ where
 /// [`TryNextWithContext`]: crate::TryNextWithContext
 impl<I, D, C> TryNextWithContext<C> for Lexer<I, D, C>
 where
-    I: TryNextWithContext<C, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
+    I: TryNextWithContext<C, Item = u8, Error: std::fmt::Display + 'static>,
     D: LexerDriver<Lexer = Lexer<I, D, C>, Context = C>,
 {
     type Item = D::Token;

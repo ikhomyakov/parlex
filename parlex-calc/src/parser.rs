@@ -21,9 +21,9 @@
 //! - **Empty statements** (a bare `;`) are emitted as a `Stat` token with
 //!   [`TokenValue::None`].
 
-use crate::{CalcError, CalcLexer, CalcLexerDriver, CalcToken, SymTab, TokenID, TokenValue};
+use crate::{CalcLexer, CalcToken, SymTab, TokenID, TokenValue};
 use parlex::{
-    LexerDriver, LexerError, Parser, ParserAction, ParserData, ParserDriver, ParserError, Token,
+    Parser, ParserAction, ParserData, ParserDriver, ParlexError, Token,
 };
 use parser_data::{AmbigID, ParData, ProdID, StateID};
 use std::marker::PhantomData;
@@ -63,12 +63,12 @@ pub mod parser_data {
 ///   and ambiguity identifiers.
 /// - `Token = CalcToken`:
 ///   The token type produced by the lexer and consumed by this parser.
-/// - `Parser = Parser<I, Self>`:
-///   The parser engine parameterized by this driver.
+/// - `Parser = Parser<I, Self, SymTab>`:
+///   The parser engine parameterized by this driver and context.
 /// - `Error = CalcError`:
 ///   Unified error type propagated during parsing.
-/// - `Context = I::Context`:
-///   Externally supplied context, such as a [`SymTab`].
+/// - `Context = SymTab`:
+///   Externally supplied context.
 ///
 /// # Responsibilities
 ///
@@ -80,17 +80,6 @@ pub mod parser_data {
 /// - **`reduce`** — executed when a grammar production completes. The driver
 ///   can perform semantic actions such as arithmetic evaluation, updating the
 ///   symbol table, or producing intermediate values.
-///
-/// # Example
-/// ```rust,ignore
-/// let mut driver = CalcParserDriver::<MyLexer>::default();
-/// let mut parser = Parser::<MyLexer, _>::new(lexer, driver);
-///
-/// let mut symtab = SymTab::new();
-/// while let Some(result) = parser.try_next_with_context(&mut symtab)? {
-///     println!("Parsed expression result: {result:?}");
-/// }
-/// ```
 ///
 /// # Notes
 ///
@@ -112,7 +101,7 @@ pub struct CalcParserDriver<I> {
 
 impl<I> ParserDriver for CalcParserDriver<I>
 where
-    I: TryNextWithContext<SymTab, Item = CalcToken>,
+    I: TryNextWithContext<SymTab, Item = CalcToken, Error: std::error::Error + Send + Sync + 'static>,
 {
     /// Parser metadata generated from the calculator grammar.
     type ParserData = ParData;
@@ -123,16 +112,13 @@ where
     /// Concrete parser engine type.
     type Parser = Parser<I, Self, SymTab>;
 
-    /// Error type for semantic or parsing failures.
-    type Error = CalcError;
-
     /// Context (symbol table or shared state).
     type Context = SymTab;
 
     /// Resolves grammar ambiguities when multiple parse actions are valid.
     ///
     /// The driver can inspect the parser conflict (`ambig`) and the upcoming
-    /// token (`_tok2`) to decide which parse branch to follow. This method
+    /// token (`token`) to decide which parse branch to follow. This method
     /// returns the selected [`ParserAction`].
     ///
     /// By default, most calculator grammars are unambiguous, so this method
@@ -143,7 +129,7 @@ where
     /// In practice, this hook is primarily used to resolve **Shift/Reduce**
     /// conflicts — cases where the parser can either:
     /// - **Reduce** using a completed production rule, or
-    /// - **Shift** the next incoming token (`tok2`).
+    /// - **Shift** the next incoming token (`token`).
     ///
     /// Other types of conflicts (such as **Reduce/Reduce**) are much more
     /// difficult to handle programmatically and usually require modifying
@@ -169,7 +155,7 @@ where
         _context: &mut Self::Context,
         ambig: <Self::ParserData as ParserData>::AmbigID,
         token: &Self::Token,
-    ) -> Result<ParserAction<StateID, ProdID, AmbigID>, Self::Error> {
+    ) -> Result<ParserAction<StateID, ProdID, AmbigID>, ParlexError> {
         let ambig_tab = ParData::lookup_ambig(ambig);
         let shift = ambig_tab[0];
         let reduce = ambig_tab[1];
@@ -220,7 +206,7 @@ where
         context: &mut Self::Context,
         prod_id: <Self::ParserData as ParserData>::ProdID,
         token: &Self::Token,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), ParlexError> {
         match prod_id {
             ProdID::Start => {
                 // Start -> Seq
@@ -231,7 +217,7 @@ where
                 // Stat ->
                 parser.tokens_push(CalcToken {
                     token_id: TokenID::Stat,
-                    line_no: token.line_no(),
+                    span: token.span(),
                     value: TokenValue::None,
                 });
             }
@@ -252,7 +238,7 @@ where
                 let TokenValue::Ident(index) = ident.value else {
                     unreachable!()
                 };
-                context.set(index, value)?;
+                context.set(index, value).map_err(|e| ParlexError::from_err(e, ident.span()))?; //TODO: fix span
                 expr.token_id = TokenID::Stat;
                 parser.tokens_push(expr);
             }
@@ -269,7 +255,7 @@ where
                 let TokenValue::Ident(index) = tok.value else {
                     unreachable!()
                 };
-                tok.value = TokenValue::Number(context.get(index)?);
+                tok.value = TokenValue::Number(context.get(index).map_err(|e| ParlexError::from_err(e, tok.span()))?);
                 parser.tokens_push(tok);
             }
             ProdID::Expr3 => {
@@ -413,29 +399,21 @@ where
 /// ```
 pub struct CalcParser<I>
 where
-    I: TryNextWithContext<SymTab, Item = u8>,
+    I: TryNextWithContext<SymTab, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
 {
     parser: Parser<CalcLexer<I>, CalcParserDriver<CalcLexer<I>>, SymTab>,
 }
 
 impl<I> CalcParser<I>
 where
-    I: TryNextWithContext<SymTab, Item = u8>,
+    I: TryNextWithContext<SymTab, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
 {
     pub fn try_new(
         input: I,
     ) -> Result<
         Self,
-        ParserError<
-            LexerError<
-                <I as TryNextWithContext<SymTab>>::Error,
-                <CalcLexerDriver<I> as LexerDriver>::Error,
-            >,
-            <CalcParserDriver<CalcLexer<I>> as ParserDriver>::Error,
-            CalcToken,
-        >,
-    > {
-        let lexer = CalcLexer::try_new(input).map_err(ParserError::Lexer)?;
+        ParlexError> {
+        let lexer = CalcLexer::try_new(input)?;
         let driver = CalcParserDriver {
             _marker: PhantomData,
         };
@@ -445,17 +423,10 @@ where
 }
 impl<I> TryNextWithContext<SymTab> for CalcParser<I>
 where
-    I: TryNextWithContext<SymTab, Item = u8>,
+    I: TryNextWithContext<SymTab, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
 {
     type Item = CalcToken;
-    type Error = ParserError<
-        LexerError<
-            <I as TryNextWithContext<SymTab>>::Error,
-            <CalcLexerDriver<I> as LexerDriver>::Error,
-        >,
-        <CalcParserDriver<CalcLexer<I>> as ParserDriver>::Error,
-        CalcToken,
-    >;
+    type Error = ParlexError;
 
     /// Returns the next fully reduced unit (`Stat`), or `None` at end of input.
     ///
@@ -474,6 +445,7 @@ where
 mod tests {
     use crate::{CalcParser, CalcToken, SymTab, TokenID, TokenValue};
     use try_next::{IterInput, TryNextWithContext};
+    use parlex::span;
 
     #[test]
     fn parses_four_stats() {
@@ -487,7 +459,7 @@ mod tests {
             parser.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::Stat,
-                line_no: 1,
+                span: span!(1, 1, 1, 10),
                 value: TokenValue::Number(1)
             }),
         ));
@@ -495,7 +467,7 @@ mod tests {
             parser.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::Stat,
-                line_no: 2,
+                span: span!(2, 2, 2, 7),
                 value: TokenValue::Number(3)
             }),
         ));
@@ -503,7 +475,7 @@ mod tests {
             parser.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::Stat,
-                line_no: 3,
+                span: span!(3, 2, 3, 27),
                 value: TokenValue::Number(-22)
             }),
         ));
@@ -511,7 +483,7 @@ mod tests {
             parser.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::Stat,
-                line_no: 5,
+                span: span!(5, 1, 5, 14),
                 value: TokenValue::Number(877)
             }),
         ));
@@ -519,7 +491,7 @@ mod tests {
             parser.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::Stat,
-                line_no: 5,
+                span: span!(5, 15, 5, 15),
                 value: TokenValue::None
             }),
         ));
@@ -547,7 +519,7 @@ mod tests {
             t1,
             CalcToken {
                 token_id: TokenID::Stat,
-                line_no: 1,
+                span: span!(1, 1, 1, 6),
                 value: TokenValue::Number(2)
             }
         ));
@@ -558,7 +530,7 @@ mod tests {
             t2,
             CalcToken {
                 token_id: TokenID::Stat,
-                line_no: 2,
+                span: span!(2, 2, 2, 7),
                 value: TokenValue::Number(5)
             }
         ));
@@ -569,7 +541,7 @@ mod tests {
             t3,
             CalcToken {
                 token_id: TokenID::Stat,
-                line_no: 2,
+                span: span!(2, 8, 2, 8),
                 value: TokenValue::None
             }
         ));
@@ -594,7 +566,7 @@ mod tests {
             t1,
             CalcToken {
                 token_id: TokenID::Stat,
-                line_no: 1,
+                span: span!(1, 1, 1, 10),
                 value: TokenValue::Number(7)
             }
         ));
@@ -605,7 +577,7 @@ mod tests {
             t2,
             CalcToken {
                 token_id: TokenID::Stat,
-                line_no: 2,
+                span: span!(2, 1, 2, 12),
                 value: TokenValue::Number(-9)
             }
         ));

@@ -152,7 +152,7 @@ pub fn generate<P: AsRef<Path>>(
     writeln!(out, "use include_bytes_aligned::include_bytes_aligned;")?;
     writeln!(
         out,
-        "use parlex::{{LexerMode, LexerRule, LexerData, Lexer, LexerDriver, Token, LexerError}};\n"
+        "use parlex::{{LexerMode, LexerRule, LexerData}};\n"
     )?;
 
     let mut modes: Vec<_> = modes.iter().filter(|&s| s != "*").collect();

@@ -12,7 +12,7 @@
 //! These types are produced by the lexer and consumed by later stages of the
 //! pipeline (e.g., the parser and semantic analysis).
 use crate::TokenID;
-use parlex::Token;
+use parlex::{Span, Token};
 
 /// The payload carried by a lexical token.
 ///
@@ -101,7 +101,7 @@ pub struct CalcToken {
     /// The associated value for the token, if applicable.
     pub value: TokenValue,
     /// The line number in the input source where the token occurs.
-    pub line_no: usize,
+    pub span: Option<Span>,
 }
 
 impl Token for CalcToken {
@@ -114,13 +114,15 @@ impl Token for CalcToken {
     }
 
     /// Returns the line number where the token appears.
-    fn line_no(&self) -> usize {
-        self.line_no
+    fn span(&self) -> Option<Span> {
+        self.span
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use parlex::span;
+
     use super::*;
 
     #[test]
@@ -169,11 +171,11 @@ mod tests {
         let t = CalcToken {
             token_id: TokenID::Number,
             value: TokenValue::Number(99),
-            line_no: 3,
+            span: span!(1, 2, 1, 10),
         };
 
         assert_eq!(t.token_id(), TokenID::Number);
-        assert_eq!(t.line_no(), 3);
+        assert_eq!(t.span().unwrap().start.column, 2);
     }
 
     #[test]
@@ -181,7 +183,7 @@ mod tests {
         let t = CalcToken {
             token_id: TokenID::Ident,
             value: TokenValue::Ident(5),
-            line_no: 10,
+            span: span!(1, 2, 1, 10),
         };
 
         assert_eq!(t.token_id(), TokenID::Ident);
@@ -192,7 +194,7 @@ mod tests {
             panic!("Expected TokenValue::Ident");
         }
 
-        assert_eq!(t.line_no(), 10);
+        assert_eq!(t.span().unwrap().display(), "span 1:2 to 1:10");
     }
 
     #[test]
@@ -200,12 +202,12 @@ mod tests {
         let t1 = CalcToken {
             token_id: TokenID::Number,
             value: TokenValue::Number(-1),
-            line_no: 1,
+            span: span!(10, 20, 12, 20),
         };
 
         let t2 = t1.clone();
         assert_eq!(t2.token_id(), t1.token_id());
-        assert_eq!(t2.line_no(), t1.line_no());
+        assert_eq!(t2.span().unwrap().display(), "span 1:2 to 1:10");
 
         let dbg_out = format!("{t1:?}");
         assert!(dbg_out.contains("CalcToken"));
@@ -217,7 +219,7 @@ mod tests {
         let t = CalcToken {
             token_id: TokenID::Number,
             value: TokenValue::Number(0),
-            line_no: 1,
+            span: span!(10, 20, 12, 20),
         };
 
         if let TokenValue::Ident(_) = t.value {

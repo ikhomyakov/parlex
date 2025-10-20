@@ -21,9 +21,9 @@
 //!
 //! [`parlex-gen`]: https://crates.io/crates/parlex-gen
 
-use crate::{CalcError, CalcToken, SymTab, TokenID, TokenValue};
+use crate::{CalcToken, SymTab, TokenID, TokenValue};
 use lexer_data::{LexData, Mode, Rule};
-use parlex::{Lexer, LexerData, LexerDriver, LexerError};
+use parlex::{Lexer, LexerData, LexerDriver, ParlexError};
 use std::marker::PhantomData;
 use try_next::TryNextWithContext;
 
@@ -82,7 +82,7 @@ pub struct CalcLexerDriver<I> {
 
 impl<I> LexerDriver for CalcLexerDriver<I>
 where
-    I: TryNextWithContext<SymTab, Item = u8>,
+    I: TryNextWithContext<SymTab, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
 {
     /// Rule identifiers and metadata produced by the lexer generator.
     type LexerData = LexData;
@@ -92,9 +92,6 @@ where
 
     /// Concrete lexer type parameterized by input, driver and context.
     type Lexer = Lexer<I, Self, SymTab>;
-
-    /// Unified error type returned by actions.
-    type Error = CalcError;
 
     /// Externally supplied context available to actions (symbol table).
     type Context = SymTab;
@@ -119,7 +116,7 @@ where
         lexer: &mut Self::Lexer,
         context: &mut Self::Context,
         rule: <Self::LexerData as LexerData>::LexerRule,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), ParlexError> {
         match rule {
             Rule::Empty => {
                 unreachable!()
@@ -129,7 +126,7 @@ where
                 let index = context.intern(lexer.take_str()?);
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::Ident,
-                    line_no: lexer.line_no(),
+                    span: lexer.span(),
                     value: TokenValue::Ident(index),
                 });
             }
@@ -138,15 +135,15 @@ where
                 let s = lexer.take_str()?;
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::Number,
-                    line_no: lexer.line_no(),
-                    value: TokenValue::Number(s.as_str().parse::<i64>()?),
+                    span: lexer.span(),
+                    value: TokenValue::Number(s.as_str().parse::<i64>().map_err(|e| ParlexError::from_err(e, lexer.span()))?),
                 });
             }
             Rule::Semicolon => {
                 // <Expr> ;
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::End,
-                    line_no: lexer.line_no(),
+                    span: lexer.span(),
                     value: TokenValue::None,
                 });
             }
@@ -154,7 +151,7 @@ where
                 // <Expr> =
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::Equals,
-                    line_no: lexer.line_no(),
+                    span: lexer.span(),
                     value: TokenValue::None,
                 });
             }
@@ -162,7 +159,7 @@ where
                 // <Expr> \+
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::Plus,
-                    line_no: lexer.line_no(),
+                    span: lexer.span(),
                     value: TokenValue::None,
                 });
             }
@@ -170,7 +167,7 @@ where
                 // <Expr> -
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::Minus,
-                    line_no: lexer.line_no(),
+                    span: lexer.span(),
                     value: TokenValue::None,
                 });
             }
@@ -178,7 +175,7 @@ where
                 // <Expr> \*
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::Asterisk,
-                    line_no: lexer.line_no(),
+                    span: lexer.span(),
                     value: TokenValue::None,
                 });
             }
@@ -186,7 +183,7 @@ where
                 // <Expr> /
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::Slash,
-                    line_no: lexer.line_no(),
+                    span: lexer.span(),
                     value: TokenValue::None,
                 });
             }
@@ -194,7 +191,7 @@ where
                 // <Expr> \(
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::LeftParen,
-                    line_no: lexer.line_no(),
+                    span: lexer.span(),
                     value: TokenValue::None,
                 });
             }
@@ -202,7 +199,7 @@ where
                 // <Expr> \)
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::RightParen,
-                    line_no: lexer.line_no(),
+                    span: lexer.span(),
                     value: TokenValue::None,
                 });
             }
@@ -222,7 +219,6 @@ where
             }
             Rule::NewLine => {
                 // <*> (?:\n)
-                lexer.inc_line_no();
             }
             Rule::WhiteSpace => { // <Expr> (?:[ \t])+
             }
@@ -230,7 +226,7 @@ where
                 // <*> .
                 lexer.yield_token(CalcToken {
                     token_id: TokenID::Error,
-                    line_no: lexer.line_no(),
+                    span: lexer.span(),
                     value: TokenValue::None,
                 });
             }
@@ -238,13 +234,13 @@ where
                 if lexer.mode() == Mode::Expr {
                     lexer.yield_token(CalcToken {
                         token_id: TokenID::End,
-                        line_no: lexer.line_no(),
+                        span: lexer.span(),
                         value: TokenValue::None,
                     });
                 } else {
                     lexer.yield_token(CalcToken {
                         token_id: TokenID::Error,
-                        line_no: lexer.line_no(),
+                        span: lexer.span(),
                         value: TokenValue::None,
                     });
                 }
@@ -293,7 +289,7 @@ where
 /// ```
 pub struct CalcLexer<I>
 where
-    I: TryNextWithContext<SymTab, Item = u8>,
+    I: TryNextWithContext<SymTab, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
 {
     /// The underlying DFA/engine that drives tokenization, parameterized by the
     /// input `I` and the driver that executes rule actions.
@@ -302,7 +298,7 @@ where
 
 impl<I> CalcLexer<I>
 where
-    I: TryNextWithContext<SymTab, Item = u8>,
+    I: TryNextWithContext<SymTab, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
 {
     /// Constructs a new calculator lexer over the provided input stream.
     ///
@@ -316,15 +312,7 @@ where
     ///
     /// Returns a [`LexerError`] if the lexer cannot be constructed from the
     /// given input (rare, but may occur if the input source fails during setup).
-    pub fn try_new(
-        input: I,
-    ) -> Result<
-        Self,
-        LexerError<
-            <I as TryNextWithContext<SymTab>>::Error,
-            <CalcLexerDriver<I> as LexerDriver>::Error,
-        >,
-    > {
+    pub fn try_new(input: I) -> Result<Self, ParlexError> {
         let driver = CalcLexerDriver {
             comment_level: 0,
             _marker: PhantomData,
@@ -335,16 +323,13 @@ where
 }
 impl<I> TryNextWithContext<SymTab> for CalcLexer<I>
 where
-    I: TryNextWithContext<SymTab, Item = u8>,
+    I: TryNextWithContext<SymTab, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
 {
     /// Tokens produced by this lexer.
     type Item = CalcToken;
 
     /// Unified error type.
-    type Error = LexerError<
-        <I as TryNextWithContext<SymTab>>::Error,
-        <CalcLexerDriver<I> as LexerDriver>::Error,
-    >;
+    type Error = ParlexError;
 
     /// Advances the lexer and returns the next token, or `None` at end of input.
     ///
@@ -371,7 +356,7 @@ where
     fn try_next_with_context(
         &mut self,
         context: &mut SymTab,
-    ) -> Result<Option<CalcToken>, <Self as TryNextWithContext<SymTab>>::Error> {
+    ) -> Result<Option<CalcToken>, ParlexError> {
         self.lexer.try_next_with_context(context)
     }
 }
@@ -379,6 +364,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{CalcLexer, CalcToken, SymTab, TokenID, TokenValue};
+    use parlex::span;
     use try_next::{IterInput, TryNextWithContext};
 
     #[test]
@@ -391,7 +377,7 @@ mod tests {
             lexer.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::Ident,
-                line_no: 1,
+                span: span!(1, 1, 1, 5),
                 value: TokenValue::Ident(0)
             }),
         ));
@@ -399,7 +385,7 @@ mod tests {
             lexer.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::Plus,
-                line_no: 2,
+                span: span!(2, 2, 2, 2),
                 value: TokenValue::None
             }),
         ));
@@ -407,7 +393,7 @@ mod tests {
             lexer.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::Ident,
-                line_no: 3,
+                span: span!(3, 2, 3, 6),
                 value: TokenValue::Ident(1)
             }),
         ));
@@ -415,7 +401,7 @@ mod tests {
             lexer.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::Number,
-                line_no: 5,
+                span: span!(2, 2, 2, 2),
                 value: TokenValue::Number(123)
             }),
         ));
@@ -423,7 +409,7 @@ mod tests {
             lexer.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::End,
-                line_no: 5,
+                span: span!(5, 1, 5, 3),
                 value: TokenValue::None
             }),
         ));

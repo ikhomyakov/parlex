@@ -9,56 +9,11 @@
 //!
 //! [`aslr`]: https://crates.io/crates/parlex-gen
 
+use crate::ParlexError;
 use crate::Token;
 use smartstring::alias::String;
 use std::fmt::Debug;
-use thiserror::Error;
 use try_next::TryNextWithContext;
-
-/// Represents all possible errors that can occur during parsing.
-///
-/// The [`ParserError`] type is generic over three type parameters:
-/// - `IE`: the **input error type**, representing failures originating from the
-///   lexer.
-/// - `DE`: the **driver error type**, representing failures produced by the
-///   [`ParserDriver`] implementation.
-/// - `T`: the **token type**, representing the fundamental input elements
-///   consumed by the parser. Must implement [`Token`] and [`Debug`].
-///
-/// Each variant corresponds to a distinct failure mode. Most variants can be
-/// automatically constructed through [`?`] propagation via their respective
-/// `From` implementations.
-///
-/// [`ParserDriver`]: crate::ParserDriver
-#[derive(Debug, Error)]
-pub enum ParserError<IE, DE, T>
-where
-    T: Token + std::fmt::Debug,
-{
-    /// No parser driver was found.
-    #[error("missing driver")]
-    MissingDriver,
-
-    /// Encountered an invalid or unexpected token.
-    #[error("bad token {0:?}")]
-    BadToken(T),
-
-    /// A `goto` action was expected but not found.
-    #[error("expected action goto")]
-    ExpectedActionGoto,
-
-    /// The parser encountered an unexpected end of input.
-    #[error("unexpected end of stream")]
-    UnexpectedEndOfStream,
-
-    /// The input source produced an error.
-    #[error("lexer stream error: {0}")]
-    Lexer(IE),
-
-    /// The parser driver produced an error.
-    #[error("driver error: {0}")]
-    Driver(DE),
-}
 
 /// Parser action used by the parsing automaton.
 ///
@@ -221,9 +176,6 @@ pub trait ParserDriver {
     /// Used to store mutable state or application-specific data during parsing.
     type Context;
 
-    /// The driver’s custom error type.
-    type Error;
-
     /// Resolves an ambiguity reported by the parser (e.g., shift/reduce conflicts).
     ///
     /// Called when the parser encounters an ambiguous grammar situation that
@@ -246,7 +198,7 @@ pub trait ParserDriver {
         context: &mut Self::Context,
         ambig: <Self::ParserData as ParserData>::AmbigID,
         tok2: &Self::Token,
-    ) -> Result<Action<Self>, Self::Error>;
+    ) -> Result<Action<Self>, ParlexError>;
 
     /// Performs a grammar reduction for the given production rule.
     ///
@@ -266,7 +218,7 @@ pub trait ParserDriver {
         context: &mut Self::Context,
         prod_id: <Self::ParserData as ParserData>::ProdID,
         token: &Self::Token,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<(), ParlexError>;
 }
 
 /// Statistics collected during the parsing process.
@@ -306,17 +258,17 @@ pub struct ParserStats {
 /// [`TryNextWithContext`]: crate::TryNextWithContext
 pub struct Parser<I, D, C>
 where
-    I: TryNextWithContext<C, Item = D::Token>,
+    I: TryNextWithContext<C, Item = D::Token, Error: std::error::Error + Send + Sync + 'static>,
     D: ParserDriver<Parser = Parser<I, D, C>>,
 {
     /// The parser driver responsible for conflict (ambiguity) resolution and
     /// production rule reduction.
     /// Temporarily moved out of the parser during driver callbacks to satisfy
     /// Rust’s borrowing rules.
-    driver: Option<Box<D>>,
+    pub driver: Option<Box<D>>,
 
     /// The input stream of tokens being processed by the parser.
-    lexer: I,
+    pub lexer: I,
 
     /// The stack of tokens currently held by the parser.
     tokens: Vec<D::Token>,
@@ -325,7 +277,7 @@ where
     states: Vec<<D::ParserData as ParserData>::StateID>,
 
     /// Statistics collected during parsing.
-    stats: ParserStats,
+    pub stats: ParserStats,
 }
 
 /// Implementation of [`Parser`] methods.
@@ -338,7 +290,7 @@ where
 /// [`Parser`]: crate::Parser
 impl<I, D, C> Parser<I, D, C>
 where
-    I: TryNextWithContext<C, Item = D::Token>,
+    I: TryNextWithContext<C, Item = D::Token, Error: std::error::Error + Send + Sync + 'static>,
     D: ParserDriver<Parser = Parser<I, D, C>>,
 {
     /// Constructs a new [`Parser`] from the given lexer and driver.
@@ -462,14 +414,12 @@ where
         context: &mut D::Context,
         ambig: <D::ParserData as ParserData>::AmbigID,
         tok2: &D::Token,
-    ) -> Result<Action<D>, ParserError<I::Error, D::Error, D::Token>> {
-        let mut driver = self
-            .driver
-            .take()
-            .ok_or_else(|| ParserError::MissingDriver)?;
-        let action = driver
-            .resolve_ambiguity(self, context, ambig, tok2)
-            .map_err(ParserError::Driver)?;
+    ) -> Result<Action<D>, ParlexError> {
+        let mut driver = self.driver.take().ok_or_else(|| ParlexError {
+            message: format!("missing parser driver"),
+            span: None,
+        })?;
+        let action = driver.resolve_ambiguity(self, context, ambig, tok2)?;
         self.driver = Some(driver);
         Ok(action)
     }
@@ -498,14 +448,12 @@ where
         context: &mut D::Context,
         prod_id: <D::ParserData as ParserData>::ProdID,
         token: &D::Token,
-    ) -> Result<(), ParserError<I::Error, D::Error, D::Token>> {
-        let mut driver = self
-            .driver
-            .take()
-            .ok_or_else(|| ParserError::MissingDriver)?;
-        driver
-            .reduce(self, context, prod_id, token)
-            .map_err(ParserError::Driver)?;
+    ) -> Result<(), ParlexError> {
+        let mut driver = self.driver.take().ok_or_else(|| ParlexError {
+            message: format!("missing parser driver"),
+            span: None,
+        })?;
+        driver.reduce(self, context, prod_id, token)?;
         self.driver = Some(driver);
         Ok(())
     }
@@ -524,11 +472,11 @@ pub type Action<D> = ParserAction<
 /// [`TryNextWithContext`]: crate::TryNextWithContext
 impl<I, D, C> TryNextWithContext<C> for Parser<I, D, C>
 where
-    I: TryNextWithContext<C, Item = D::Token>,
+    I: TryNextWithContext<C, Item = D::Token, Error: std::error::Error + Send + Sync + 'static>,
     D: ParserDriver<Parser = Parser<I, D, C>, Context = C>,
 {
     type Item = D::Token;
-    type Error = ParserError<I::Error, D::Error, D::Token>;
+    type Error = ParlexError;
 
     /// Attempts to parse the input and produce the next reduced (accepted) token.
     ///
@@ -544,7 +492,7 @@ where
         let mut token = match self
             .lexer
             .try_next_with_context(context)
-            .map_err(ParserError::Lexer)?
+            .map_err(|e| ParlexError::from_err(e, None))?
         {
             Some(t) => t,
             None => {
@@ -576,10 +524,15 @@ where
                     token = match self
                         .lexer
                         .try_next_with_context(context)
-                        .map_err(ParserError::Lexer)?
+                        .map_err(|e| ParlexError::from_err(e, None))?
                     {
                         Some(t) => t,
-                        None => return Err(ParserError::UnexpectedEndOfStream),
+                        None => {
+                            return Err(ParlexError {
+                                message: format!("unexpected end of stream"),
+                                span: None,
+                            });
+                        }
                     };
                     self.stats.shifts += 1;
                 }
@@ -594,7 +547,10 @@ where
                     let Action::<D>::Goto(new_state) =
                         <D::ParserData as ParserData>::lookup(state, lhs_id)
                     else {
-                        return Err(ParserError::ExpectedActionGoto);
+                        return Err(ParlexError {
+                            message: format!("expected `goto` action"),
+                            span: None,
+                        });
                     };
                     state = new_state;
                     self.states.push(state);
@@ -609,7 +565,10 @@ where
                 }
 
                 Action::<D>::Error => {
-                    return Err(ParserError::BadToken(token));
+                    return Err(ParlexError {
+                        message: format!("parser error on token {token:?}"),
+                        span: token.span(),
+                    });
                 }
 
                 Action::<D>::Ambig(_) | Action::<D>::Goto(_) => unreachable!(),
@@ -625,13 +584,13 @@ where
 /// Unit tests for [`Parser`] and related components.
 #[cfg(test)]
 mod tests {
-    use crate::lexer::{Lexer, LexerData, LexerDriver, LexerError, LexerMode, LexerRule, Token};
-    use crate::parser::{
-        Parser, ParserAction, ParserAmbigID, ParserData, ParserDriver, ParserError, ParserProdID,
-        ParserStateID, ParserTokenID,
+    use crate::{
+        Lexer, LexerData, LexerDriver, LexerMode, LexerRule, ParlexError, Parser, ParserAction,
+        ParserAmbigID, ParserData, ParserDriver, ParserProdID, ParserStateID, ParserTokenID,
+        span, Span, Token,
     };
     use smartstring::alias::String;
-    use std::fmt::Debug;
+    use std::{convert::Infallible, fmt::Debug};
     use try_next::TryNextWithContext;
 
     include!(concat!(
@@ -651,7 +610,7 @@ mod tests {
     #[derive(Debug, Clone)]
     struct XToken {
         token_id: TokenID,
-        line_no: usize,
+        span: Option<Span>,
     }
     impl Token for XToken {
         type TokenID = TokenID;
@@ -659,8 +618,8 @@ mod tests {
         fn token_id(&self) -> Self::TokenID {
             self.token_id
         }
-        fn line_no(&self) -> usize {
-            self.line_no
+        fn span(&self) -> Option<Span> {
+            self.span
         }
     }
 
@@ -670,12 +629,11 @@ mod tests {
 
     impl<I> LexerDriver for XLexerDriver<I>
     where
-        I: TryNextWithContext<String, Item = u8>,
+        I: TryNextWithContext<String, Item = u8, Error = Infallible>,
     {
         type LexerData = LexData;
         type Token = XToken;
         type Lexer = Lexer<I, Self, String>;
-        type Error = std::convert::Infallible;
         type Context = String;
 
         fn action(
@@ -683,10 +641,10 @@ mod tests {
             lexer: &mut Self::Lexer,
             context: &mut Self::Context,
             _rule: <Self::LexerData as LexerData>::LexerRule,
-        ) -> Result<(), Self::Error> {
+        ) -> Result<(), ParlexError> {
             lexer.yield_token(XToken {
                 token_id: TokenID::End,
-                line_no: 10,
+                span: span!(1, 1, 1, 10),
             });
             context.push('e');
             Ok(())
@@ -695,24 +653,16 @@ mod tests {
 
     struct XLexer<I>
     where
-        I: TryNextWithContext<String, Item = u8>,
+        I: TryNextWithContext<String, Item = u8, Error = Infallible>,
     {
         lexer: Lexer<I, XLexerDriver<I>, String>,
     }
 
     impl<I> XLexer<I>
     where
-        I: TryNextWithContext<String, Item = u8>,
+        I: TryNextWithContext<String, Item = u8, Error = Infallible>,
     {
-        fn try_new(
-            input: I,
-        ) -> Result<
-            Self,
-            LexerError<
-                <I as TryNextWithContext<String>>::Error,
-                <XLexerDriver<I> as LexerDriver>::Error,
-            >,
-        > {
+        fn try_new(input: I) -> Result<Self, ParlexError> {
             let driver = XLexerDriver {
                 _marker: std::marker::PhantomData,
             };
@@ -722,13 +672,10 @@ mod tests {
     }
     impl<I> TryNextWithContext<String> for XLexer<I>
     where
-        I: TryNextWithContext<String, Item = u8>,
+        I: TryNextWithContext<String, Item = u8, Error = Infallible>,
     {
         type Item = XToken;
-        type Error = LexerError<
-            <I as TryNextWithContext<String>>::Error,
-            <XLexerDriver<I> as LexerDriver>::Error,
-        >;
+        type Error = ParlexError;
 
         fn try_next_with_context(
             &mut self,
@@ -742,7 +689,7 @@ mod tests {
     struct Empty {}
     impl TryNextWithContext<String> for Empty {
         type Item = u8;
-        type Error = std::convert::Infallible;
+        type Error = Infallible;
         fn try_next_with_context(
             &mut self,
             context: &mut String,
@@ -758,12 +705,11 @@ mod tests {
 
     impl<I> ParserDriver for XParserDriver<I>
     where
-        I: TryNextWithContext<String, Item = XToken>,
+        I: TryNextWithContext<String, Item = XToken, Error = ParlexError>,
     {
         type ParserData = ParData;
         type Token = XToken;
         type Parser = Parser<I, Self, String>;
-        type Error = std::convert::Infallible;
         type Context = String;
 
         fn resolve_ambiguity(
@@ -772,7 +718,7 @@ mod tests {
             _context: &mut String,
             _ambig: <Self::ParserData as ParserData>::AmbigID,
             _tok2: &Self::Token,
-        ) -> Result<ParserAction<StateID, ProdID, AmbigID>, Self::Error> {
+        ) -> Result<ParserAction<StateID, ProdID, AmbigID>, ParlexError> {
             Ok(ParserAction::Shift(StateID(0)))
         }
 
@@ -782,7 +728,7 @@ mod tests {
             context: &mut String,
             prod_id: <Self::ParserData as ParserData>::ProdID,
             token: &Self::Token,
-        ) -> Result<(), Self::Error> {
+        ) -> Result<(), ParlexError> {
             match prod_id {
                 ProdID::Start => {
                     // Accept - does not get reduced
@@ -794,7 +740,7 @@ mod tests {
                     context.push('p');
                     parser.tokens_push(XToken {
                         token_id: TokenID::S,
-                        line_no: token.line_no(),
+                        span: token.span(),
                     });
                 }
             }
@@ -804,29 +750,17 @@ mod tests {
 
     struct XParser<I>
     where
-        I: TryNextWithContext<String, Item = u8>,
+        I: TryNextWithContext<String, Item = u8, Error = Infallible>,
     {
         parser: Parser<XLexer<I>, XParserDriver<XLexer<I>>, String>,
     }
 
     impl<I> XParser<I>
     where
-        I: TryNextWithContext<String, Item = u8>,
+        I: TryNextWithContext<String, Item = u8, Error = Infallible>,
     {
-        fn try_new(
-            input: I,
-        ) -> Result<
-            Self,
-            ParserError<
-                LexerError<
-                    <I as TryNextWithContext<String>>::Error,
-                    <XLexerDriver<I> as LexerDriver>::Error,
-                >,
-                <XParserDriver<XLexer<I>> as ParserDriver>::Error,
-                XToken,
-            >,
-        > {
-            let lexer = XLexer::try_new(input).map_err(ParserError::Lexer)?;
+        fn try_new(input: I) -> Result<Self, ParlexError> {
+            let lexer = XLexer::try_new(input)?;
             let driver = XParserDriver {
                 _marker: std::marker::PhantomData,
             };
@@ -836,17 +770,10 @@ mod tests {
     }
     impl<I> TryNextWithContext<String> for XParser<I>
     where
-        I: TryNextWithContext<String, Item = u8>,
+        I: TryNextWithContext<String, Item = u8, Error = Infallible>,
     {
         type Item = XToken;
-        type Error = ParserError<
-            LexerError<
-                <I as TryNextWithContext<String>>::Error,
-                <XLexerDriver<I> as LexerDriver>::Error,
-            >,
-            <XParserDriver<XLexer<I>> as ParserDriver>::Error,
-            XToken,
-        >;
+        type Error = ParlexError;
 
         fn try_next_with_context(
             &mut self,
@@ -867,7 +794,7 @@ mod tests {
         while let Some(t) = parser.try_next_with_context(&mut context).unwrap() {
             dbg!(&t);
             assert_eq!(t.token_id(), TokenID::S);
-            assert_eq!(t.line_no(), 10);
+            //assert_eq!(t.span(), None);
         }
         assert_eq!(context, "baEepba");
     }

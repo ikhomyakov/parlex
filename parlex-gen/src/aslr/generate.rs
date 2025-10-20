@@ -137,7 +137,7 @@ pub fn generate<P: AsRef<Path>>(
 
     writeln!(
         out,
-        "use parlex::{{ParserAction, ParserStateID, ParserAmbigID, ParserProdID, ParserTokenID, ParserData, ParserStats, ParserDriver, Parser, ParserError}};\n"
+        "use parlex::{{ParserAction, ParserStateID, ParserAmbigID, ParserProdID, ParserTokenID, ParserData}};\n"
     )?;
 
     let prod_labels: Vec<_> = prods

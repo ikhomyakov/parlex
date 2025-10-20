@@ -14,6 +14,7 @@
 //! See the crate’s README for additional examples and implementation guidance.
 //!
 //! [`alex`]: https://crates.io/crates/parlex-gen
+use crate::{ParlexError, Span};
 use regex_automata::{
     Anchored, HalfMatch, Input as RegexInput,
     dfa::{Automaton, dense},
@@ -23,68 +24,7 @@ use smartstring::alias::String;
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::mem;
-use thiserror::Error;
 use try_next::TryNextWithContext;
-
-/// Represents all possible errors that can occur during lexical analysis.
-///
-/// The [`LexerError`] type is generic over two error types:
-/// - `IE`: the **input error type**, representing failures from the input source
-///   (e.g., I/O or stream reading errors).
-/// - `DE`: the **driver error type**, representing failures in the custom
-///   [`LexerDriver`] implementation.
-///
-/// This enum provides comprehensive coverage for issues that can arise while
-/// scanning input, performing DFA transitions, decoding UTF-8, or interacting
-/// with the lexer driver.
-///
-/// Each variant captures a distinct failure mode, and most are automatically
-/// constructed via [`?`] propagation through their respective `From`
-/// implementations.
-///
-/// [`LexerDriver`]: crate::LexerDriver
-#[derive(Debug, Error)]
-pub enum LexerError<IE, DE> {
-    /// No lexer driver was found.
-    #[error("missing driver")]
-    MissingDriver,
-
-    /// Failed to deserialize DFA tables.
-    ///
-    /// Typically indicates corrupted or incompatible serialized data.
-    #[error("failed to deserialize DFA tables: {0}")]
-    DfaDeserialize(#[from] regex_automata::util::wire::DeserializeError),
-
-    /// Failed to build DFA table.
-    ///
-    /// Currently used only in test mode.
-    #[error("failed to deserialize DFA tables: {0}")]
-    DfaBuild(#[from] dense::BuildError),
-
-    /// A regex engine match error occurred during DFA evaluation.
-    #[error("match error: {0}")]
-    RegexMatch(#[from] regex_automata::MatchError),
-
-    /// Attempted to pop beyond the buffer capacity (underflow).
-    #[error("buffer underflow while popping (overpop)")]
-    Overpop,
-
-    /// Encountered an invalid or unexpected byte.
-    #[error("bad byte {0:?}")]
-    BadByte(u8),
-
-    /// Failed to decode UTF-8 from input.
-    #[error("utf8 error {0:?}")]
-    FromUtf8(#[from] std::string::FromUtf8Error),
-
-    /// The input source produced an error.
-    #[error("input stream error: {0}")]
-    Input(IE),
-
-    /// The lexer driver produced an error.
-    #[error("driver error: {0}")]
-    Driver(DE),
-}
 
 /// A trait representing a token in lexical analysis or parsing.
 ///
@@ -97,8 +37,8 @@ pub trait Token: Clone + Debug {
     /// Returns the identifier of this token.
     fn token_id(&self) -> Self::TokenID;
 
-    /// Returns the line number where this token appears in the source.
-    fn line_no(&self) -> usize;
+    /// Returns the span of the token.
+    fn span(&self) -> Option<Span>;
 }
 
 /// A trait representing a lexer mode used during lexical analysis.
@@ -167,9 +107,6 @@ pub trait LexerDriver {
     /// User context type
     type Context;
 
-    /// Driver error type
-    type Error;
-
     /// Executes a lexer action based on the matched rule, lexer and driver contexts
     /// Must be provided by the implementor.
     fn action(
@@ -177,7 +114,7 @@ pub trait LexerDriver {
         lexer: &mut Self::Lexer,
         context: &mut Self::Context,
         rule: <Self::LexerData as LexerData>::LexerRule,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<(), ParlexError>;
 }
 
 /// Statistics collected by the lexer during processing.
@@ -217,15 +154,15 @@ pub struct LexerStats {
 /// [`TryNextWithContext`]: crate::TryNextWithContext
 pub struct Lexer<I, D, C>
 where
-    I: TryNextWithContext<C, Item = u8>,
+    I: TryNextWithContext<C, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
     D: LexerDriver<Lexer = Lexer<I, D, C>>,
 {
     /// Lexer driver that handles token emission and mode transitions.
     /// Temporarily taken out of the lexer during `action` invocations.
-    driver: Option<Box<D>>,
+    pub driver: Option<Box<D>>,
 
     /// The input stream being processed by the lexer.
-    input: I,
+    pub input: I,
 
     /// The current lexer mode, defined by the driver’s [`LexerData`].
     mode: <D::LexerData as LexerData>::LexerMode,
@@ -242,10 +179,10 @@ where
     unread: Vec<u8>,
 
     /// Indicates whether the lexer is currently accumulating token text.
-    accum_flag: bool,
+    pub accum_flag: bool,
 
     /// Primary buffer used to accumulate the characters of the current token.
-    buffer: Vec<u8>,
+    pub buffer: Vec<u8>,
 
     /// Signals that the end of input has been reached.
     end_flag: bool,
@@ -254,11 +191,11 @@ where
     /// Acts as the output buffer for tokens emitted by the lexer.
     tokens: VecDeque<D::Token>,
 
-    /// The current line number in the input, used for diagnostics.
-    line_no: usize,
+    /// The current span, used for diagnostics.
+    span: Option<Span>,
 
     /// Statistics collected during lexing.
-    stats: LexerStats,
+    pub stats: LexerStats,
 }
 
 /// Implementation of [`Lexer`] methods.
@@ -271,7 +208,7 @@ where
 /// [`Lexer`]: crate::Lexer
 impl<I, D, C> Lexer<I, D, C>
 where
-    I: TryNextWithContext<C, Item = u8>,
+    I: TryNextWithContext<C, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
     D: LexerDriver<Lexer = Lexer<I, D, C>>,
 {
     /// Constructs a new [`Lexer`] from the given input source and driver.
@@ -289,11 +226,11 @@ where
     /// A fully initialized [`Lexer`] ready to begin lexical analysis.
     ///
     /// # Errors
-    /// Returns a [`LexerError::DfaDeserialize`] if any DFA fails to deserialize
+    /// Returns a [`ParlexError`] if any DFA fails to deserialize
     /// via [`dense::DFA::from_bytes`].
     ///
     /// [`LexerDriver`]: crate::LexerDriver
-    pub fn try_new(input: I, driver: D) -> Result<Self, LexerError<I::Error, D::Error>> {
+    pub fn try_new(input: I, driver: D) -> Result<Self, ParlexError> {
         Ok(Self {
             driver: Some(Box::new(driver)),
             input,
@@ -304,19 +241,23 @@ where
             buffer: Vec::new(),
             end_flag: false,
             tokens: VecDeque::new(),
-            line_no: 1,
+            span: None,
             stats: LexerStats::default(),
         })
     }
 
+    pub fn span(&self) -> Option<Span> {
+        self.span
+    }
+
     #[cfg(not(test))]
-    fn restore_dfas()
-    -> Result<Vec<dense::DFA<&'static [u32]>>, regex_automata::util::wire::DeserializeError> {
+    fn restore_dfas() -> Result<Vec<dense::DFA<&'static [u32]>>, ParlexError> {
         let mut dfas = Vec::new();
         let dfa_bytes = <D as LexerDriver>::LexerData::dfa_bytes();
         let mut offset = 0;
         for _ in 0..<D::LexerData as LexerData>::LexerMode::COUNT {
-            let (dfa, len) = dense::DFA::from_bytes(&dfa_bytes[offset..])?;
+            let (dfa, len) = dense::DFA::from_bytes(&dfa_bytes[offset..])
+                .map_err(|e| ParlexError::from_err(e, None))?;
             dfas.push(dfa);
             offset += len;
         }
@@ -324,9 +265,9 @@ where
     }
 
     #[cfg(test)]
-    fn restore_dfas() -> Result<Vec<dense::DFA<Vec<u32>>>, dense::BuildError> {
+    fn restore_dfas() -> Result<Vec<dense::DFA<Vec<u32>>>, ParlexError> {
         let mut dfas = Vec::new();
-        let dfa = dense::DFA::new_many::<&str>(&[])?;
+        let dfa = dense::DFA::new_many::<&str>(&[]).map_err(|e| ParlexError::from_err(e, None))?;
         dfas.push(dfa);
         Ok(dfas)
     }
@@ -341,18 +282,6 @@ where
     #[inline]
     pub fn mode(&self) -> <D::LexerData as LexerData>::LexerMode {
         self.mode
-    }
-
-    /// Returns the current line number.
-    #[inline]
-    pub fn line_no(&self) -> usize {
-        self.line_no
-    }
-
-    /// Increments line number.
-    #[inline]
-    pub fn inc_line_no(&mut self) {
-        self.line_no += 1;
     }
 
     /// Switches on accumulation of bytes into the buffer.
@@ -383,9 +312,10 @@ where
 
     /// Takes accumulated bytes from the main buffer and converts them into a UTF-8 string.
     #[inline]
-    pub fn take_str(&mut self) -> Result<String, std::string::FromUtf8Error> {
+    pub fn take_str(&mut self) -> Result<String, ParlexError> {
         let bytes = self.take_bytes();
-        let s = std::string::String::from_utf8(bytes)?;
+        let s = std::string::String::from_utf8(bytes)
+            .map_err(|e| ParlexError::from_err(e, self.span()))?;
         Ok(s.into())
     }
 
@@ -424,13 +354,14 @@ where
         unread: &mut Vec<u8>,
         input: &mut I,
         stats: &mut LexerStats,
-    ) -> Result<Option<u8>, LexerError<I::Error, D::Error>> {
+        span: &Option<Span>,
+    ) -> Result<Option<u8>, ParlexError> {
         match unread.pop() {
             Some(b) => Ok(Some(b)),
             None => {
                 let b = input
                     .try_next_with_context(context)
-                    .map_err(LexerError::Input)?;
+                    .map_err(|e| ParlexError::from_err(e, *span))?;
                 stats.chars += 1;
                 Ok(b)
             }
@@ -465,14 +396,12 @@ where
         &mut self,
         context: &mut D::Context,
         rule: <D::LexerData as LexerData>::LexerRule,
-    ) -> Result<(), LexerError<I::Error, D::Error>> {
-        let mut driver = self
-            .driver
-            .take()
-            .ok_or_else(|| LexerError::MissingDriver)?;
-        driver
-            .action(self, context, rule)
-            .map_err(LexerError::Driver)?;
+    ) -> Result<(), ParlexError> {
+        let mut driver = self.driver.take().ok_or_else(|| ParlexError {
+            message: format!("missing lexer driver"),
+            span: None,
+        })?;
+        driver.action(self, context, rule)?;
         self.driver = Some(driver);
         Ok(())
     }
@@ -497,16 +426,15 @@ where
     ///
     /// [`get_next_byte`]: Self::get_next_byte
     /// [`TryNextWithContext`]: crate::TryNextWithContext
-    fn try_match(
-        &mut self,
-        context: &mut C,
-    ) -> Result<Option<PatternID>, LexerError<I::Error, D::Error>> {
+    fn try_match(&mut self, context: &mut C) -> Result<Option<PatternID>, ParlexError> {
         self.stats.matches += 1;
         if !self.accum_flag {
             self.buffer.clear();
         }
         let dfa = &self.dfas[self.mode.into()];
-        let mut state = dfa.start_state_forward(&RegexInput::new(&[]).anchored(Anchored::Yes))?;
+        let mut state = dfa
+            .start_state_forward(&RegexInput::new(&[]).anchored(Anchored::Yes))
+            .map_err(|e| ParlexError::from_err(e, self.span()))?;
         log::trace!(
             "START: mode={}, s={}",
             Into::<usize>::into(self.mode),
@@ -516,8 +444,13 @@ where
         let mut i = 0;
 
         loop {
-            let b =
-                Self::get_next_byte(context, &mut self.unread, &mut self.input, &mut self.stats)?;
+            let b = Self::get_next_byte(
+                context,
+                &mut self.unread,
+                &mut self.input,
+                &mut self.stats,
+                &self.span,
+            )?;
             match b {
                 Some(b) => {
                     self.buffer.push(b);
@@ -554,13 +487,21 @@ where
                                     for _ in 0..i - m.offset() + 1 {
                                         match self.buffer.pop() {
                                             Some(x) => self.unread.push(x),
-                                            None => return Err(LexerError::Overpop),
+                                            None => {
+                                                return Err(ParlexError {
+                                                    message: format!("lexer buffer underflow"),
+                                                    span: self.span(),
+                                                });
+                                            }
                                         }
                                     }
                                     return Ok(Some(m.pattern()));
                                 }
                                 None => {
-                                    return Err(LexerError::BadByte(b));
+                                    return Err(ParlexError {
+                                        message: format!("lexer error on byte '{}'", b),
+                                        span: self.span(),
+                                    });
                                 }
                             }
                         }
@@ -592,7 +533,12 @@ where
                     self.stats.unreads += 1;
                     match self.buffer.pop() {
                         Some(x) => self.unread.push(x),
-                        None => return Err(LexerError::Overpop),
+                        None => {
+                            return Err(ParlexError {
+                                message: format!("lexer buffer underflow"),
+                                span: self.span(),
+                            });
+                        }
                     }
                 }
                 return Ok(Some(m.pattern()));
@@ -611,11 +557,11 @@ where
 /// [`TryNextWithContext`]: crate::TryNextWithContext
 impl<I, D, C> TryNextWithContext<C> for Lexer<I, D, C>
 where
-    I: TryNextWithContext<C, Item = u8>,
+    I: TryNextWithContext<C, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
     D: LexerDriver<Lexer = Lexer<I, D, C>, Context = C>,
 {
     type Item = D::Token;
-    type Error = LexerError<I::Error, D::Error>;
+    type Error = ParlexError;
 
     /// Advances the lexer to produce the next token.
     ///
@@ -688,9 +634,9 @@ where
 /// Unit tests for [`Lexer`] and related components.
 #[cfg(test)]
 mod tests {
-    use crate::lexer::{Lexer, LexerData, LexerDriver, LexerError, LexerMode, LexerRule, Token};
+    use crate::{Lexer, LexerData, LexerDriver, LexerMode, LexerRule, ParlexError, Span, Token};
     use smartstring::alias::String;
-    use std::fmt::Debug;
+    use std::{convert::Infallible, fmt::Debug};
     use try_next::TryNextWithContext;
 
     include!(concat!(
@@ -706,7 +652,7 @@ mod tests {
     #[derive(Debug, Clone)]
     struct XToken {
         token_id: usize,
-        line_no: usize,
+        span: Option<Span>,
     }
     impl Token for XToken {
         type TokenID = usize;
@@ -714,8 +660,8 @@ mod tests {
         fn token_id(&self) -> Self::TokenID {
             self.token_id
         }
-        fn line_no(&self) -> usize {
-            self.line_no
+        fn span(&self) -> Option<Span> {
+            self.span
         }
     }
 
@@ -725,12 +671,11 @@ mod tests {
 
     impl<I> LexerDriver for XLexerDriver<I>
     where
-        I: TryNextWithContext<String, Item = u8>,
+        I: TryNextWithContext<String, Item = u8, Error = Infallible>,
     {
         type LexerData = LexData;
         type Token = XToken;
         type Lexer = Lexer<I, Self, String>;
-        type Error = std::convert::Infallible;
         type Context = String;
 
         fn action(
@@ -738,16 +683,16 @@ mod tests {
             lexer: &mut Self::Lexer,
             context: &mut Self::Context,
             rule: <Self::LexerData as LexerData>::LexerRule,
-        ) -> Result<(), Self::Error> {
+        ) -> Result<(), ParlexError> {
             let token = match rule {
                 Rule::Empty => unreachable!(),
                 Rule::A => XToken {
                     token_id: 1,
-                    line_no: lexer.line_no(),
+                    span: lexer.span(),
                 }, // <Expr> .
                 Rule::End => XToken {
                     token_id: 2,
-                    line_no: lexer.line_no(),
+                    span: lexer.span(),
                 },
             };
             lexer.yield_token(token);
@@ -757,24 +702,16 @@ mod tests {
     }
     struct XLexer<I>
     where
-        I: TryNextWithContext<String, Item = u8>,
+        I: TryNextWithContext<String, Item = u8, Error = Infallible>,
     {
         lexer: Lexer<I, XLexerDriver<I>, String>,
     }
 
     impl<I> XLexer<I>
     where
-        I: TryNextWithContext<String, Item = u8>,
+        I: TryNextWithContext<String, Item = u8, Error = Infallible>,
     {
-        fn try_new(
-            input: I,
-        ) -> Result<
-            Self,
-            LexerError<
-                <I as TryNextWithContext<String>>::Error,
-                <XLexerDriver<I> as LexerDriver>::Error,
-            >,
-        > {
+        fn try_new(input: I) -> Result<Self, ParlexError> {
             let driver = XLexerDriver {
                 _marker: std::marker::PhantomData,
             };
@@ -784,18 +721,15 @@ mod tests {
     }
     impl<I> TryNextWithContext<String> for XLexer<I>
     where
-        I: TryNextWithContext<String, Item = u8>,
+        I: TryNextWithContext<String, Item = u8, Error = Infallible>,
     {
         type Item = XToken;
-        type Error = LexerError<
-            <I as TryNextWithContext<String>>::Error,
-            <XLexerDriver<I> as LexerDriver>::Error,
-        >;
+        type Error = ParlexError;
 
         fn try_next_with_context(
             &mut self,
             context: &mut String,
-        ) -> Result<Option<XToken>, <Self as TryNextWithContext<String>>::Error> {
+        ) -> Result<Option<XToken>, ParlexError> {
             context.push('a');
             self.lexer.try_next_with_context(context)
         }
@@ -804,7 +738,7 @@ mod tests {
     struct Empty {}
     impl TryNextWithContext<String> for Empty {
         type Item = u8;
-        type Error = std::convert::Infallible;
+        type Error = Infallible;
 
         fn try_next_with_context(
             &mut self,

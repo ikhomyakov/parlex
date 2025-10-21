@@ -513,7 +513,6 @@ where
                 }
                 action => action,
             };
-            dbg!(action);
             match action {
                 Action::<D>::Shift(new_state) => {
                     log::trace!("Shift {:?}", new_state);

@@ -12,6 +12,7 @@
 //! These types are produced by the lexer and consumed by later stages of the
 //! pipeline (e.g., the parser and semantic analysis).
 use crate::TokenID;
+use clap::value_parser;
 use parlex::{Span, Token};
 use smartstring::alias::String;
 
@@ -62,6 +63,12 @@ pub enum TokenValue {
 
     /// Comment.
     Comment(String),
+
+    /// Statement
+    Stat {
+        comments: Vec<String>,
+        value: Option<i64>,
+    },
 }
 
 /// A concrete lexical token for the calculator frontend.
@@ -120,6 +127,53 @@ impl CalcToken {
                 }
             },
             None => (),
+        }
+    }
+
+    pub fn to_statement(&mut self, comment: Option<String>) {
+        self.token_id = TokenID::Stat;
+        match &mut self.value {
+            TokenValue::None => {
+                self.value = TokenValue::Stat {
+                    comments: if let Some(comment) = comment {
+                        vec![comment]
+                    } else {
+                        vec![]
+                    },
+                    value: None,
+                };
+            }
+            TokenValue::Comment(comment2) => {
+                self.value = TokenValue::Stat {
+                    comments: if let Some(comment) = comment {
+                        vec![comment, std::mem::take(comment2)]
+                    } else {
+                        vec![std::mem::take(comment2)]
+                    },
+                    value: None,
+                };
+            }
+            TokenValue::Ident(_) => panic!("unexpected token value in `to_statement`"),
+            TokenValue::Number(value) => {
+                self.value = TokenValue::Stat {
+                    comments: if let Some(comment) = comment {
+                        vec![comment]
+                    } else {
+                        vec![]
+                    },
+                    value: Some(*value),
+                };
+            }
+            TokenValue::Stat { comments, value } => {
+                let mut cs = std::mem::take(comments);
+                if let Some(comment) = comment {
+                    cs.insert(0, comment);
+                }
+                self.value = TokenValue::Stat {
+                    comments: cs,
+                    value: std::mem::take(value),
+                };
+            }
         }
     }
 }

@@ -61,7 +61,9 @@ The calculator serves as:
 ```bash
 cargo run -p parlex-calc -- parse <<EOS
 /* examples */
+/* statement 1 */
 x = 2 + 3;
+/* statement 2 */
 y = x * 4
 EOS
 ```
@@ -69,31 +71,72 @@ EOS
 Prints both the **symbol table (`SymTab`)** and the **parsed token stream**.
 
 ```text
-[parlex-calc/src/main.rs:58:13] &symtab = SymTab {
+[parlex-calc/src/main.rs:171:13] &parser.stats() = (
+    LexerStats {
+        unreads: 63,
+        chars: 72,
+        matches: 34,
+    },
+    ParserStats {
+        tokens: 16,
+        shifts: 13,
+        reductions: 11,
+        ambigs: 0,
+    },
+)
+[parlex-calc/src/main.rs:172:13] &symtab = SymTab {
     tab: {
         "x": 5,
         "y": 20,
     },
 }
-[parlex-calc/src/main.rs:59:13] &toks = [
+[parlex-calc/src/main.rs:173:13] &toks = [
     CalcToken {
         token_id: Stat,
-        value: Number(
-            5,
+        value: Stat {
+            comments: [
+                "/* examples */",
+                "/* statement 1 */",
+            ],
+            value: Some(
+                5,
+            ),
+        },
+        span: Some(
+            Span {
+                start: Position {
+                    line: 0,
+                    column: 0,
+                },
+                end: Position {
+                    line: 2,
+                    column: 9,
+                },
+            },
         ),
-        line_no: 1,
     },
     CalcToken {
         token_id: Stat,
-        value: Number(
-            20,
+        value: Stat {
+            comments: [
+                "/* statement 2 */",
+            ],
+            value: Some(
+                20,
+            ),
+        },
+        span: Some(
+            Span {
+                start: Position {
+                    line: 3,
+                    column: 0,
+                },
+                end: Position {
+                    line: 4,
+                    column: 9,
+                },
+            },
         ),
-        line_no: 2,
-    },
-    CalcToken {
-        token_id: Stat,
-        value: None,
-        line_no: 3,
     },
 ]
 ```

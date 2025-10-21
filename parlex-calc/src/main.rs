@@ -16,36 +16,42 @@
 //!
 //! ## Example Usage
 //! ```bash
-//! $ echo "x = 2; y = x * 5 + 3; y - 1;" | cargo run -- parse
+//! $ echo "/* x */ x = 2; /* x */ y = x * 5 + 3; /* z */ z = -(y - - - - 1);" | cargo run -- parse
 //! ```
 //!
 //! Output (debug format):
 //! ```text
-//! [parlex-calc/src/main.rs:87:13] &parser.stats() = (
+//! [parlex-calc/src/main.rs:171:13] &parser.stats() = (
 //!     LexerStats {
-//!         unreads: 55,
-//!         chars: 29,
-//!         matches: 30,
+//!         unreads: 105,
+//!         chars: 66,
+//!         matches: 55,
 //!     },
 //!     ParserStats {
-//!         tokens: 18,
-//!         shifts: 13,
-//!         reductions: 13,
+//!         tokens: 29,
+//!         shifts: 24,
+//!         reductions: 21,
 //!         ambigs: 1,
 //!     },
 //! )
-//! [parlex-calc/src/main.rs:88:13] &symtab = SymTab {
+//! [parlex-calc/src/main.rs:172:13] &symtab = SymTab {
 //!     tab: {
 //!         "x": 2,
 //!         "y": 13,
+//!         "z": -14,
 //!     },
 //! }
-//! [parlex-calc/src/main.rs:89:13] &toks = [
+//! [parlex-calc/src/main.rs:173:13] &toks = [
 //!     CalcToken {
 //!         token_id: Stat,
-//!         value: Number(
-//!             2,
-//!         ),
+//!         value: Stat {
+//!             comments: [
+//!                 "/* x */",
+//!             ],
+//!             value: Some(
+//!                 2,
+//!             ),
+//!         },
 //!         span: Some(
 //!             Span {
 //!                 start: Position {
@@ -54,43 +60,53 @@
 //!                 },
 //!                 end: Position {
 //!                     line: 0,
-//!                     column: 5,
+//!                     column: 13,
 //!                 },
 //!             },
 //!         ),
 //!     },
 //!     CalcToken {
 //!         token_id: Stat,
-//!         value: Number(
-//!             13,
-//!         ),
+//!         value: Stat {
+//!             comments: [
+//!                 "/* x */",
+//!             ],
+//!             value: Some(
+//!                 13,
+//!             ),
+//!         },
 //!         span: Some(
 //!             Span {
 //!                 start: Position {
 //!                     line: 0,
-//!                     column: 7,
+//!                     column: 15,
 //!                 },
 //!                 end: Position {
 //!                     line: 0,
-//!                     column: 20,
+//!                     column: 36,
 //!                 },
 //!             },
 //!         ),
 //!     },
 //!     CalcToken {
 //!         token_id: Stat,
-//!         value: Number(
-//!             12,
-//!         ),
+//!         value: Stat {
+//!             comments: [
+//!                 "/* z */",
+//!             ],
+//!             value: Some(
+//!                 -14,
+//!             ),
+//!         },
 //!         span: Some(
 //!             Span {
 //!                 start: Position {
 //!                     line: 0,
-//!                     column: 22,
+//!                     column: 38,
 //!                 },
 //!                 end: Position {
 //!                     line: 0,
-//!                     column: 27,
+//!                     column: 64,
 //!                 },
 //!             },
 //!         ),

@@ -9,6 +9,10 @@
 --   - <Comment>: handles multi-line comment content
 --   - <*>: matches any state (wildcard)
 --
+--   Comments in this lexer are **multi-lexeme tokens** — they can span multiple
+--   regex matches (e.g., comment delimiters and inner text). To handle this,
+--   the lexer uses an **accumulation mode** that automatically tracks the
+--   source span and merges all fragments into a single `comment` token.
 
 -- Basic token pattern definitions.
 --

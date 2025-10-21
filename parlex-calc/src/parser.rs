@@ -227,10 +227,15 @@ where
                 });
             }
             ProdID::Stat2 => {
-                // Stat -> Comment
-                let mut tok = parser.tokens_pop();
-                tok.token_id = TokenID::Stat;
-                parser.tokens_push(tok);
+                // Stat -> comment Stat
+                let mut stat = parser.tokens_pop();
+                let comment_tok = parser.tokens_pop();
+                let TokenValue::Comment(comment) = comment_tok.value else {
+                    unreachable!()
+                };
+                stat.to_statement(Some(comment));
+                stat.merge_span(&comment_tok.span);
+                parser.tokens_push(stat);
             }
             ProdID::Stat3 => {
                 // Stat -> Expr

@@ -32,7 +32,7 @@
 //! let source = "a = 1 + 2 * 3";
 //!
 //! // Initialize parser
-//! 
+//!
 //! let mut symtab = SymTab::new();
 //! let input = IterInput::from(source.bytes());
 //! let mut parser = CalcParser::try_new(input).unwrap();

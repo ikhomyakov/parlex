@@ -23,7 +23,7 @@
 
 use crate::{CalcToken, SymTab, TokenID, TokenValue};
 use lexer_data::{LexData, Mode, Rule};
-use parlex::{Lexer, LexerData, LexerDriver, ParlexError};
+use parlex::{Lexer, LexerData, LexerDriver, LexerStats, ParlexError};
 use std::marker::PhantomData;
 use try_next::TryNextWithContext;
 
@@ -209,6 +209,11 @@ where
             }
             Rule::CommentBegin => {
                 // <Expr,Comment> /\*
+
+                // Accumulate fragments and span data from multiple
+                // regex matches into a single comment token
+                lexer.accum();
+
                 lexer.begin(Mode::Comment);
                 self.comment_level += 1;
             }
@@ -217,6 +222,12 @@ where
                 self.comment_level -= 1;
                 if self.comment_level == 0 {
                     lexer.begin(Mode::Expr);
+                    let s = lexer.take_str()?;
+                    lexer.yield_token(CalcToken {
+                        token_id: TokenID::Comment,
+                        span: Some(lexer.span()),
+                        value: TokenValue::Comment(s),
+                    });
                 }
             }
             Rule::CommentChar => { // <Comment> .+
@@ -325,7 +336,7 @@ where
         Ok(Self { lexer })
     }
 }
-impl<I> TryNextWithContext<SymTab> for CalcLexer<I>
+impl<I> TryNextWithContext<SymTab, LexerStats> for CalcLexer<I>
 where
     I: TryNextWithContext<SymTab, Item = u8, Error: std::fmt::Display + 'static>,
 {
@@ -363,6 +374,10 @@ where
     ) -> Result<Option<CalcToken>, ParlexError> {
         self.lexer.try_next_with_context(context)
     }
+
+    fn stats(&self) -> LexerStats {
+        self.lexer.stats()
+    }
 }
 
 #[cfg(test)]
@@ -375,13 +390,13 @@ mod tests {
     fn lex_ident_plus_ident_number_end() {
         let _ = env_logger::builder().is_test(true).try_init();
         let mut symtab = SymTab::new();
-        let input = IterInput::from("hello\n +\n world\n\n123".bytes());
+        let input = IterInput::from("hello\n +\n\n\n\n\n\n\n\n\n\n world\n\n123".bytes());
         let mut lexer = CalcLexer::try_new(input).unwrap();
         assert!(matches!(
             lexer.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::Ident,
-                span: span!(1, 1, 1, 5),
+                span: span!(0, 0, 0, 5),
                 value: TokenValue::Ident(0)
             }),
         ));
@@ -389,7 +404,7 @@ mod tests {
             lexer.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::Plus,
-                span: span!(2, 2, 2, 2),
+                span: span!(1, 1, 1, 2),
                 value: TokenValue::None
             }),
         ));
@@ -397,7 +412,7 @@ mod tests {
             lexer.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::Ident,
-                span: span!(3, 2, 3, 6),
+                span: span!(11, 1, 11, 6),
                 value: TokenValue::Ident(1)
             }),
         ));
@@ -405,7 +420,7 @@ mod tests {
             lexer.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::Number,
-                span: span!(2, 2, 2, 2),
+                span: span!(13, 0, 13, 3),
                 value: TokenValue::Number(123)
             }),
         ));
@@ -413,7 +428,7 @@ mod tests {
             lexer.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::End,
-                span: span!(5, 1, 5, 3),
+                span: span!(13, 3, 13, 3),
                 value: TokenValue::None
             }),
         ));
@@ -427,7 +442,7 @@ mod tests {
     fn nested_block_comments_are_skipped() {
         let _ = env_logger::builder().is_test(true).try_init();
         let mut symtab = SymTab::new();
-        let src = "a /* outer /* inner */ still comment */ + b;";
+        let src = "a /* outer /* inner\n */ still\n comment */ + b;";
         let input = IterInput::from(src.bytes());
         let mut lexer = CalcLexer::try_new(input).unwrap();
 
@@ -437,47 +452,63 @@ mod tests {
             t1,
             CalcToken {
                 token_id: TokenID::Ident,
-                ..
+                span: span!(0, 0, 0, 1),
+                value: TokenValue::Ident(0),
             }
         ));
 
-        // +
+        // comment
         let t2 = lexer.try_next_with_context(&mut symtab).unwrap().unwrap();
         assert!(matches!(
             t2,
             CalcToken {
+                token_id: TokenID::Comment,
+                span: span!(0, 2, 2, 11),
+                value: TokenValue::Comment(s),
+            } if s == "/* outer /* inner\n */ still\n comment */"
+        ));
+
+        // +
+        let t3 = lexer.try_next_with_context(&mut symtab).unwrap().unwrap();
+        assert!(matches!(
+            dbg!(t3),
+            CalcToken {
                 token_id: TokenID::Plus,
-                ..
+                span: span!(2, 12, 2, 13),
+                value: TokenValue::None,
             }
         ));
 
         // b
-        let t3 = lexer.try_next_with_context(&mut symtab).unwrap().unwrap();
+        let t4 = lexer.try_next_with_context(&mut symtab).unwrap().unwrap();
         assert!(matches!(
-            t3,
+            dbg!(t4),
             CalcToken {
                 token_id: TokenID::Ident,
-                ..
+                span: span!(2, 14, 2, 15),
+                value: TokenValue::Ident(1),
             }
         ));
 
         // End from ';'
-        let t4 = lexer.try_next_with_context(&mut symtab).unwrap().unwrap();
+        let t5 = lexer.try_next_with_context(&mut symtab).unwrap().unwrap();
         assert!(matches!(
-            t4,
+            dbg!(t5),
             CalcToken {
                 token_id: TokenID::End,
-                ..
+                span: span!(2, 15, 2, 16),
+                value: TokenValue::None,
             }
         ));
 
         // End from EOF
-        let t5 = lexer.try_next_with_context(&mut symtab).unwrap().unwrap();
+        let t6 = lexer.try_next_with_context(&mut symtab).unwrap().unwrap();
         assert!(matches!(
-            t5,
+            dbg!(t6),
             CalcToken {
                 token_id: TokenID::End,
-                ..
+                span: span!(2, 16, 2, 16),
+                value: TokenValue::None,
             }
         ));
 

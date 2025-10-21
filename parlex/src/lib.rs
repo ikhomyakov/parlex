@@ -67,7 +67,8 @@ mod error;
 mod lexer;
 mod parser;
 
-pub use cursor::{LexerCursor, Position, Span, SpanError};
+pub(crate) use cursor::LINE_HISTORY_SIZE;
+pub use cursor::{LexerCursor, LineHistory, Position, Span, SpanError};
 pub use error::ParlexError;
 pub use lexer::{Lexer, LexerData, LexerDriver, LexerMode, LexerRule, LexerStats, Token};
 pub use parser::{

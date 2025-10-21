@@ -121,7 +121,7 @@ pub trait LexerDriver {
 /// Tracks basic metrics about lexer activity and performance.
 /// Typically generated and updated internally by the **parlex-gen**
 /// lexer generator (**Alex**).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct LexerStats {
     /// The number of characters that were unread or pushed back into the stream.
     pub unreads: usize,
@@ -194,7 +194,7 @@ where
     pub cursor: LexerCursor,
 
     /// Statistics collected during lexing.
-    pub stats: LexerStats,
+    stats: LexerStats,
 }
 
 /// Implementation of [`Lexer`] methods.
@@ -442,6 +442,7 @@ where
         self.stats.matches += 1;
         if !self.accum_flag {
             self.buffer.clear();
+            self.cursor.span.collapse();
         }
         let dfa = &self.dfas[self.mode.into()];
         let mut state = dfa
@@ -470,9 +471,10 @@ where
                     if dfa.is_special_state(state) {
                         if dfa.is_match_state(state) {
                             log::trace!(
-                                "MATCH: i={}, b={:?}, n={}, p={}, s={}",
+                                "MATCH: i={}, b={:?}, span={}, n={}, p={}, s={}",
                                 i,
                                 b as char,
+                                self.cursor.span.display(),
                                 dfa.match_len(state),
                                 dfa.match_pattern(state, 0).as_usize(),
                                 state.as_usize()
@@ -481,16 +483,18 @@ where
                         } else if dfa.is_dead_state(state) || dfa.is_quit_state(state) {
                             if dfa.is_dead_state(state) {
                                 log::trace!(
-                                    "DEAD: i={}, b={:?}, s={}",
+                                    "DEAD: i={}, b={:?}, span={}, s={}",
                                     i,
                                     b as char,
+                                    self.cursor.span.display(),
                                     state.as_usize()
                                 );
                             } else {
                                 log::trace!(
-                                    "QUIT: i={}, b={:?}, s={}",
+                                    "QUIT: i={}, b={:?}, span={}, s={}",
                                     i,
                                     b as char,
+                                    self.cursor.span.display(),
                                     state.as_usize()
                                 );
                             }
@@ -500,6 +504,7 @@ where
                                         match self.buffer.pop() {
                                             Some(b) => {
                                                 self.unread.push(b);
+                                                self.stats.unreads += 1;
                                                 self.cursor.retreat(b).map_err(|e| {
                                                     ParlexError::from_err(e, Some(self.span()))
                                                 })?;
@@ -524,9 +529,10 @@ where
                         }
                     } else {
                         log::trace!(
-                            "OTHER: i={}, b={:?}, s={}; match={}, dead={}, quit={}, start={}, accel={}",
+                            "OTHER: i={}, b={:?}, span={}, s={}; match={}, dead={}, quit={}, start={}, accel={}",
                             i,
                             b as char,
+                            self.cursor.span.display(),
                             state.as_usize(),
                             dfa.is_match_state(state),
                             dfa.is_dead_state(state),
@@ -547,10 +553,10 @@ where
         match last_match {
             Some(m) => {
                 for _ in 0..i - m.offset() {
-                    self.stats.unreads += 1;
                     match self.buffer.pop() {
                         Some(b) => {
                             self.unread.push(b);
+                            self.stats.unreads += 1;
                             self.cursor
                                 .retreat(b)
                                 .map_err(|e| ParlexError::from_err(e, Some(self.span())))?;
@@ -577,7 +583,7 @@ where
 /// Provides context-aware advancement of the lexer state.
 ///
 /// [`TryNextWithContext`]: crate::TryNextWithContext
-impl<I, D, C> TryNextWithContext<C> for Lexer<I, D, C>
+impl<I, D, C> TryNextWithContext<C, LexerStats> for Lexer<I, D, C>
 where
     I: TryNextWithContext<C, Item = u8, Error: std::fmt::Display + 'static>,
     D: LexerDriver<Lexer = Lexer<I, D, C>, Context = C>,
@@ -650,6 +656,10 @@ where
         } else {
             return Ok(None);
         }
+    }
+
+    fn stats(&self) -> LexerStats {
+        self.stats
     }
 }
 

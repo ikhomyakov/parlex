@@ -22,7 +22,9 @@
 //!   [`TokenValue::None`].
 
 use crate::{CalcLexer, CalcToken, SymTab, TokenID, TokenValue};
-use parlex::{ParlexError, Parser, ParserAction, ParserData, ParserDriver, Token};
+use parlex::{
+    LexerStats, ParlexError, Parser, ParserAction, ParserData, ParserDriver, ParserStats, Token,
+};
 use parser_data::{AmbigID, ParData, ProdID, StateID};
 use std::marker::PhantomData;
 use try_next::TryNextWithContext;
@@ -101,6 +103,7 @@ impl<I> ParserDriver for CalcParserDriver<I>
 where
     I: TryNextWithContext<
             SymTab,
+            LexerStats,
             Item = CalcToken,
             Error: std::error::Error + Send + Sync + 'static,
         >,
@@ -211,7 +214,7 @@ where
     ) -> Result<(), ParlexError> {
         match prod_id {
             ProdID::Start => {
-                // Start -> Seq
+                // Start -> Stat
                 // Accept - does not get reduced
                 unreachable!()
             }
@@ -224,12 +227,18 @@ where
                 });
             }
             ProdID::Stat2 => {
+                // Stat -> Comment
+                let mut tok = parser.tokens_pop();
+                tok.token_id = TokenID::Stat;
+                parser.tokens_push(tok);
+            }
+            ProdID::Stat3 => {
                 // Stat -> Expr
                 let mut expr = parser.tokens_pop();
                 expr.token_id = TokenID::Stat;
                 parser.tokens_push(expr);
             }
-            ProdID::Stat3 => {
+            ProdID::Stat4 => {
                 // Stat -> ident = Expr
                 let mut expr = parser.tokens_pop();
                 let TokenValue::Number(value) = expr.value else {
@@ -244,6 +253,7 @@ where
                     .set(index, value)
                     .map_err(|e| ParlexError::from_err(e, ident.span()))?; //TODO: fix span
                 expr.token_id = TokenID::Stat;
+                expr.merge_span(&ident.span);
                 parser.tokens_push(expr);
             }
             ProdID::Expr1 => {
@@ -278,6 +288,7 @@ where
                     unreachable!()
                 };
                 expr1.value = TokenValue::Number(value1 + value2);
+                expr1.merge_span(&expr2.span);
                 parser.tokens_push(expr1);
             }
             ProdID::Expr4 => {
@@ -292,6 +303,7 @@ where
                     unreachable!()
                 };
                 expr1.value = TokenValue::Number(value1 - value2);
+                expr1.merge_span(&expr2.span);
                 parser.tokens_push(expr1);
             }
             ProdID::Expr5 => {
@@ -306,6 +318,7 @@ where
                     unreachable!()
                 };
                 expr1.value = TokenValue::Number(value1 * value2);
+                expr1.merge_span(&expr2.span);
                 parser.tokens_push(expr1);
             }
             ProdID::Expr6 => {
@@ -320,23 +333,27 @@ where
                     unreachable!()
                 };
                 expr1.value = TokenValue::Number(value1 / value2);
+                expr1.merge_span(&expr2.span);
                 parser.tokens_push(expr1);
             }
             ProdID::Expr7 => {
                 // Expr -> - Expr
                 let mut expr = parser.tokens_pop();
-                parser.tokens_pop();
+                let minus = parser.tokens_pop();
                 let TokenValue::Number(value) = expr.value else {
                     unreachable!()
                 };
                 expr.value = TokenValue::Number(-value);
+                expr.merge_span(&minus.span);
                 parser.tokens_push(expr);
             }
             ProdID::Expr8 => {
                 // Expr -> ( Expr )
-                parser.tokens_pop();
-                let expr = parser.tokens_pop();
-                parser.tokens_pop();
+                let left_paren = parser.tokens_pop();
+                let mut expr = parser.tokens_pop();
+                let right_paren = parser.tokens_pop();
+                expr.merge_span(&left_paren.span);
+                expr.merge_span(&right_paren.span);
                 parser.tokens_push(expr);
             }
         }
@@ -425,7 +442,7 @@ where
         Ok(Self { parser })
     }
 }
-impl<I> TryNextWithContext<SymTab> for CalcParser<I>
+impl<I> TryNextWithContext<SymTab, (LexerStats, ParserStats)> for CalcParser<I>
 where
     I: TryNextWithContext<SymTab, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
 {
@@ -440,8 +457,12 @@ where
     fn try_next_with_context(
         &mut self,
         context: &mut SymTab,
-    ) -> Result<Option<CalcToken>, <Self as TryNextWithContext<SymTab>>::Error> {
+    ) -> Result<Option<CalcToken>, ParlexError> {
         self.parser.try_next_with_context(context)
+    }
+
+    fn stats(&self) -> (LexerStats, ParserStats) {
+        self.parser.stats()
     }
 }
 
@@ -463,7 +484,7 @@ mod tests {
             parser.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::Stat,
-                span: span!(1, 1, 1, 10),
+                span: span!(0, 0, 0, 9),
                 value: TokenValue::Number(1)
             }),
         ));
@@ -471,7 +492,7 @@ mod tests {
             parser.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::Stat,
-                span: span!(2, 2, 2, 7),
+                span: span!(1, 1, 1, 6),
                 value: TokenValue::Number(3)
             }),
         ));
@@ -479,7 +500,7 @@ mod tests {
             parser.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::Stat,
-                span: span!(3, 2, 3, 27),
+                span: span!(2, 1, 2, 26),
                 value: TokenValue::Number(-22)
             }),
         ));
@@ -487,7 +508,7 @@ mod tests {
             parser.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::Stat,
-                span: span!(5, 1, 5, 14),
+                span: span!(4, 0, 4, 13),
                 value: TokenValue::Number(877)
             }),
         ));
@@ -495,7 +516,7 @@ mod tests {
             parser.try_next_with_context(&mut symtab).unwrap(),
             Some(CalcToken {
                 token_id: TokenID::Stat,
-                span: span!(5, 15, 5, 15),
+                span: span!(4, 14, 4, 14),
                 value: TokenValue::None
             }),
         ));
@@ -523,7 +544,7 @@ mod tests {
             t1,
             CalcToken {
                 token_id: TokenID::Stat,
-                span: span!(1, 1, 1, 6),
+                span: span!(0, 0, 0, 5),
                 value: TokenValue::Number(2)
             }
         ));
@@ -534,7 +555,7 @@ mod tests {
             t2,
             CalcToken {
                 token_id: TokenID::Stat,
-                span: span!(2, 2, 2, 7),
+                span: span!(1, 1, 1, 6),
                 value: TokenValue::Number(5)
             }
         ));
@@ -545,7 +566,7 @@ mod tests {
             t3,
             CalcToken {
                 token_id: TokenID::Stat,
-                span: span!(2, 8, 2, 8),
+                span: span!(1, 7, 1, 7),
                 value: TokenValue::None
             }
         ));
@@ -566,11 +587,12 @@ mod tests {
 
         // 1 + 2 * 3 => 7
         let t1 = parser.try_next_with_context(&mut symtab).unwrap().unwrap();
+        dbg!(parser.stats());
         assert!(matches!(
             t1,
             CalcToken {
                 token_id: TokenID::Stat,
-                span: span!(1, 1, 1, 10),
+                span: span!(0, 0, 0, 9),
                 value: TokenValue::Number(7)
             }
         ));
@@ -581,7 +603,7 @@ mod tests {
             t2,
             CalcToken {
                 token_id: TokenID::Stat,
-                span: span!(2, 1, 2, 12),
+                span: span!(1, 0, 1, 12),
                 value: TokenValue::Number(-9)
             }
         ));

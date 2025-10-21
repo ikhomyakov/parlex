@@ -21,12 +21,96 @@
 //!
 //! Output (debug format):
 //! ```text
-//! [src/main.rs:47] &symtab = SymTab { entries: ["x", "y"], values: [2, 13] }
-//! [src/main.rs:48] &toks = [
-//!     CalcToken { token_id: Stat, line_no: 1, value: Number(2) },
-//!     CalcToken { token_id: Stat, line_no: 1, value: Number(13) },
-//!     CalcToken { token_id: Stat, line_no: 1, value: Number(12) },
-//!     CalcToken { token_id: Stat, line_no: 1, value: None },
+//! [parlex-calc/src/main.rs:87:13] &parser.stats() = (
+//!     LexerStats {
+//!         unreads: 55,
+//!         chars: 29,
+//!         matches: 30,
+//!     },
+//!     ParserStats {
+//!         tokens: 18,
+//!         shifts: 13,
+//!         reductions: 13,
+//!         ambigs: 1,
+//!     },
+//! )
+//! [parlex-calc/src/main.rs:88:13] &symtab = SymTab {
+//!     tab: {
+//!         "x": 2,
+//!         "y": 13,
+//!     },
+//! }
+//! [parlex-calc/src/main.rs:89:13] &toks = [
+//!     CalcToken {
+//!         token_id: Stat,
+//!         value: Number(
+//!             2,
+//!         ),
+//!         span: Some(
+//!             Span {
+//!                 start: Position {
+//!                     line: 0,
+//!                     column: 0,
+//!                 },
+//!                 end: Position {
+//!                     line: 0,
+//!                     column: 5,
+//!                 },
+//!             },
+//!         ),
+//!     },
+//!     CalcToken {
+//!         token_id: Stat,
+//!         value: Number(
+//!             13,
+//!         ),
+//!         span: Some(
+//!             Span {
+//!                 start: Position {
+//!                     line: 0,
+//!                     column: 7,
+//!                 },
+//!                 end: Position {
+//!                     line: 0,
+//!                     column: 20,
+//!                 },
+//!             },
+//!         ),
+//!     },
+//!     CalcToken {
+//!         token_id: Stat,
+//!         value: Number(
+//!             12,
+//!         ),
+//!         span: Some(
+//!             Span {
+//!                 start: Position {
+//!                     line: 0,
+//!                     column: 22,
+//!                 },
+//!                 end: Position {
+//!                     line: 0,
+//!                     column: 27,
+//!                 },
+//!             },
+//!         ),
+//!     },
+//!     CalcToken {
+//!         token_id: Stat,
+//!         value: None,
+//!         span: Some(
+//!             Span {
+//!                 start: Position {
+//!                     line: 1,
+//!                     column: 0,
+//!                 },
+//!                 end: Position {
+//!                     line: 1,
+//!                     column: 0,
+//!                 },
+//!             },
+//!         ),
+//!     },
 //! ]
 //! ```
 //!
@@ -84,6 +168,7 @@ fn main() {
             let toks = parser
                 .try_collect_with_context(&mut symtab)
                 .expect("parsing error");
+            dbg!(&parser.stats());
             dbg!(&symtab);
             dbg!(&toks);
         }

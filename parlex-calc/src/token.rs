@@ -13,6 +13,7 @@
 //! pipeline (e.g., the parser and semantic analysis).
 use crate::TokenID;
 use parlex::{Span, Token};
+use smartstring::alias::String;
 
 /// The payload carried by a lexical token.
 ///
@@ -58,6 +59,9 @@ pub enum TokenValue {
 
     /// Integer literal token.
     Number(i64),
+
+    /// Comment.
+    Comment(String),
 }
 
 /// A concrete lexical token for the calculator frontend.
@@ -84,15 +88,15 @@ pub enum TokenValue {
 /// # Example
 /// ```rust
 /// # use parlex_calc::{CalcToken, TokenID, TokenValue};
-/// # use parlex::Token;
+/// # use parlex::{Token, span};
 /// let tok = CalcToken {
 ///     token_id: TokenID::Number,
 ///     value: TokenValue::Number(99),
-///     line_no: 3,
+///     span: span!(0, 0, 0, 2),
 /// };
 ///
 /// assert_eq!(tok.token_id(), TokenID::Number);
-/// assert_eq!(tok.line_no(), 3);
+/// assert_eq!(tok.span(), span!(0, 0, 0, 2));
 /// ```
 #[derive(Debug, Clone)]
 pub struct CalcToken {
@@ -102,6 +106,22 @@ pub struct CalcToken {
     pub value: TokenValue,
     /// The line number in the input source where the token occurs.
     pub span: Option<Span>,
+}
+
+impl CalcToken {
+    pub fn merge_span(&mut self, other_span: &Option<Span>) {
+        match other_span {
+            Some(other_span) => match &mut self.span {
+                Some(my_span) => {
+                    *my_span = my_span.merge(other_span);
+                }
+                None => {
+                    self.span = Some(*other_span);
+                }
+            },
+            None => (),
+        }
+    }
 }
 
 impl Token for CalcToken {
@@ -121,9 +141,8 @@ impl Token for CalcToken {
 
 #[cfg(test)]
 mod tests {
-    use parlex::span;
-
     use super::*;
+    use parlex::{Position, span};
 
     #[test]
     fn token_value_number_extraction_with_let_else() {
@@ -207,7 +226,7 @@ mod tests {
 
         let t2 = t1.clone();
         assert_eq!(t2.token_id(), t1.token_id());
-        assert_eq!(t2.span().unwrap().display(), "span 1:2 to 1:10");
+        assert_eq!(t2.span().unwrap().display(), "span 10:20 to 12:20");
 
         let dbg_out = format!("{t1:?}");
         assert!(dbg_out.contains("CalcToken"));
@@ -227,5 +246,95 @@ mod tests {
         } else {
             panic!("Expected TokenValue::Ident");
         }
+    }
+
+    fn sp(sl: usize, sc: usize, el: usize, ec: usize) -> Span {
+        Span::new(Position::new(sl, sc), Position::new(el, ec))
+    }
+
+    fn tok(token_id: TokenID, value: TokenValue, span: Option<Span>) -> CalcToken {
+        CalcToken {
+            token_id,
+            value,
+            span,
+        }
+    }
+
+    // 1) Existing span + other span => expand to cover both ends.
+    #[test]
+    fn merge_span_expands_existing_span_to_cover_both() {
+        let mut t = tok(
+            TokenID::Number,
+            TokenValue::Number(1),
+            Some(sp(0, 5, 0, 10)),
+        );
+        let other = Some(sp(0, 2, 0, 12));
+
+        t.merge_span(&other);
+
+        let m = t.span.unwrap();
+        assert_eq!(m.start, Position::new(0, 2));
+        assert_eq!(m.end, Position::new(0, 12));
+    }
+
+    // 2) self.span == None, other == Some(...) => set span.
+    #[test]
+    fn merge_span_sets_when_self_is_none() {
+        let mut t = tok(TokenID::Ident, TokenValue::Ident(0), None);
+        let new_span = Some(sp(1, 0, 1, 3));
+
+        t.merge_span(&new_span);
+
+        assert_eq!(t.span, new_span);
+    }
+
+    // 3) other == None => no-op (existing span preserved).
+    #[test]
+    fn merge_span_is_noop_when_other_is_none() {
+        let before = Some(sp(2, 4, 2, 9));
+        let mut t = tok(TokenID::Number, TokenValue::Number(0), before);
+
+        t.merge_span(&None);
+
+        assert_eq!(t.span, before);
+    }
+
+    // 4) self.span == None and other == None => remains None.
+    #[test]
+    fn merge_span_both_none_remains_none() {
+        let mut t = tok(TokenID::Number, TokenValue::Number(0), None);
+
+        t.merge_span(&None);
+
+        assert!(t.span.is_none());
+    }
+
+    // 5) other fully inside self => merged span unchanged.
+    #[test]
+    fn merge_span_other_within_self_no_change() {
+        let mut t = tok(
+            TokenID::Number,
+            TokenValue::Number(0),
+            Some(sp(5, 2, 5, 10)),
+        );
+        let inner = Some(sp(5, 4, 5, 7)); // strictly inside
+
+        t.merge_span(&inner);
+
+        assert_eq!(t.span, Some(sp(5, 2, 5, 10)));
+    }
+
+    // 6) cross-line merge: expands across lines correctly.
+    #[test]
+    fn merge_span_cross_line_expands() {
+        // self: [1:5 .. 2:3), other: [0:9 .. 3:1) => merged: [0:9 .. 3:1)
+        let mut t = tok(TokenID::Ident, TokenValue::Ident(1), Some(sp(1, 5, 2, 3)));
+        let other = Some(sp(0, 9, 3, 1));
+
+        t.merge_span(&other);
+
+        let m = t.span.unwrap();
+        assert_eq!(m.start, Position::new(0, 9));
+        assert_eq!(m.end, Position::new(3, 1));
     }
 }

@@ -9,8 +9,7 @@
 //!
 //! [`aslr`]: https://crates.io/crates/parlex-gen
 
-use crate::ParlexError;
-use crate::Token;
+use crate::{LexerStats, ParlexError, Token};
 use smartstring::alias::String;
 use std::fmt::Debug;
 use try_next::TryNextWithContext;
@@ -224,7 +223,7 @@ pub trait ParserDriver {
 /// Statistics collected during the parsing process.
 ///
 /// Tracks basic metrics about parser activity and performance.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct ParserStats {
     /// The total number of tokens processed by the parser.
     pub tokens: usize,
@@ -258,7 +257,7 @@ pub struct ParserStats {
 /// [`TryNextWithContext`]: crate::TryNextWithContext
 pub struct Parser<I, D, C>
 where
-    I: TryNextWithContext<C, Item = D::Token, Error: std::fmt::Display + 'static>,
+    I: TryNextWithContext<C, LexerStats, Item = D::Token, Error: std::fmt::Display + 'static>,
     D: ParserDriver<Parser = Parser<I, D, C>>,
 {
     /// The parser driver responsible for conflict (ambiguity) resolution and
@@ -277,7 +276,7 @@ where
     states: Vec<<D::ParserData as ParserData>::StateID>,
 
     /// Statistics collected during parsing.
-    pub stats: ParserStats,
+    stats: ParserStats,
 }
 
 /// Implementation of [`Parser`] methods.
@@ -290,7 +289,7 @@ where
 /// [`Parser`]: crate::Parser
 impl<I, D, C> Parser<I, D, C>
 where
-    I: TryNextWithContext<C, Item = D::Token, Error: std::fmt::Display + 'static>,
+    I: TryNextWithContext<C, LexerStats, Item = D::Token, Error: std::fmt::Display + 'static>,
     D: ParserDriver<Parser = Parser<I, D, C>>,
 {
     /// Constructs a new [`Parser`] from the given lexer and driver.
@@ -470,9 +469,9 @@ pub type Action<D> = ParserAction<
 /// Provides context-aware advancement of the parser.
 ///
 /// [`TryNextWithContext`]: crate::TryNextWithContext
-impl<I, D, C> TryNextWithContext<C> for Parser<I, D, C>
+impl<I, D, C> TryNextWithContext<C, (LexerStats, ParserStats)> for Parser<I, D, C>
 where
-    I: TryNextWithContext<C, Item = D::Token, Error: std::fmt::Display + 'static>,
+    I: TryNextWithContext<C, LexerStats, Item = D::Token, Error: std::fmt::Display + 'static>,
     D: ParserDriver<Parser = Parser<I, D, C>, Context = C>,
 {
     type Item = D::Token;
@@ -514,6 +513,7 @@ where
                 }
                 action => action,
             };
+            dbg!(action);
             match action {
                 Action::<D>::Shift(new_state) => {
                     log::trace!("Shift {:?}", new_state);
@@ -579,15 +579,19 @@ where
             }
         }
     }
+
+    fn stats(&self) -> (LexerStats, ParserStats) {
+        (self.lexer.stats(), self.stats)
+    }
 }
 
 /// Unit tests for [`Parser`] and related components.
 #[cfg(test)]
 mod tests {
     use crate::{
-        Lexer, LexerData, LexerDriver, LexerMode, LexerRule, ParlexError, Parser, ParserAction,
-        ParserAmbigID, ParserData, ParserDriver, ParserProdID, ParserStateID, ParserTokenID, Span,
-        Token, span,
+        Lexer, LexerData, LexerDriver, LexerMode, LexerRule, LexerStats, ParlexError, Parser,
+        ParserAction, ParserAmbigID, ParserData, ParserDriver, ParserProdID, ParserStateID,
+        ParserStats, ParserTokenID, Span, Token, span,
     };
     use smartstring::alias::String;
     use std::{convert::Infallible, fmt::Debug};
@@ -670,7 +674,7 @@ mod tests {
             Ok(Self { lexer })
         }
     }
-    impl<I> TryNextWithContext<String> for XLexer<I>
+    impl<I> TryNextWithContext<String, LexerStats> for XLexer<I>
     where
         I: TryNextWithContext<String, Item = u8, Error = Infallible>,
     {
@@ -680,9 +684,13 @@ mod tests {
         fn try_next_with_context(
             &mut self,
             context: &mut String,
-        ) -> Result<Option<XToken>, <Self as TryNextWithContext<String>>::Error> {
+        ) -> Result<Option<XToken>, ParlexError> {
             context.push('a');
             self.lexer.try_next_with_context(context)
+        }
+
+        fn stats(&self) -> LexerStats {
+            self.lexer.stats()
         }
     }
 
@@ -705,7 +713,7 @@ mod tests {
 
     impl<I> ParserDriver for XParserDriver<I>
     where
-        I: TryNextWithContext<String, Item = XToken, Error = ParlexError>,
+        I: TryNextWithContext<String, LexerStats, Item = XToken, Error = ParlexError>,
     {
         type ParserData = ParData;
         type Token = XToken;
@@ -768,7 +776,7 @@ mod tests {
             Ok(Self { parser })
         }
     }
-    impl<I> TryNextWithContext<String> for XParser<I>
+    impl<I> TryNextWithContext<String, (LexerStats, ParserStats)> for XParser<I>
     where
         I: TryNextWithContext<String, Item = u8, Error = Infallible>,
     {
@@ -778,7 +786,7 @@ mod tests {
         fn try_next_with_context(
             &mut self,
             context: &mut String,
-        ) -> Result<Option<XToken>, <Self as TryNextWithContext<String>>::Error> {
+        ) -> Result<Option<XToken>, ParlexError> {
             context.push('b');
             self.parser.try_next_with_context(context)
         }
@@ -797,5 +805,7 @@ mod tests {
             //assert_eq!(t.span(), None);
         }
         assert_eq!(context, "baEepba");
+        assert!(matches!(parser.stats(), (_, _)));
+        dbg!(parser.stats());
     }
 }

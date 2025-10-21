@@ -18,8 +18,9 @@
 --   <label>: <Nonterminal> -> <production>
 --
 stat1: Stat ->
-stat2: Stat -> Expr
-stat3: Stat -> ident = Expr
+stat2: Stat -> Comment
+stat3: Stat -> Expr
+stat4: Stat -> ident = Expr
 expr1: Expr -> number
 expr2: Expr -> ident
 expr3: Expr -> Expr + Expr

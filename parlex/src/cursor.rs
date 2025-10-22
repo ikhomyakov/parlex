@@ -117,16 +117,11 @@ impl Span {
 ///
 /// # Variants
 ///
-/// * [`HistoryFull`] — the line history ring buffer has reached its maximum capacity.
 /// * [`HistoryEmpty`] — the line history ring buffer is empty and cannot be popped.
 /// * [`UnexpectedRetreat`] — an invalid retreat operation was attempted, such as
 ///   moving before column 0 or before the first line.
 #[derive(Debug, Clone, Error)]
 pub enum SpanError {
-    /// The line history buffer is full — too many consecutive newlines were recorded.
-    #[error("span history buffer is full")]
-    HistoryFull,
-
     /// The line history buffer is empty — there is no previous line length to restore.
     #[error("span history buffer is empty")]
     HistoryEmpty,
@@ -148,16 +143,28 @@ pub enum SpanError {
 /// when calling [`LexerCursor::retreat`].  
 /// Once the buffer is full, pushing another newline via [`LexerCursor::advance`]
 /// will return [`SpanError::HistoryFull`].
-pub(crate) const LINE_HISTORY_SIZE: usize = 128;
+pub(crate) const LINE_HISTORY_SIZE: usize = 16;
 
-/// A fixed-size ring buffer storing recent line lengths.
-///
-/// `LineHistory` is used internally by [`LexerCursor`] to track the length of
-/// each completed line (the column count before each newline).
+/// A fixed-capacity history buffer that stores recent entries in a ring-like fashion.
 ///
 /// The buffer supports `push` and `pop` operations in FIFO order and
 /// automatically wraps around when reaching the end. Its capacity is fixed
 /// at compile time via a const generic parameter `N`.
+///
+/// The buffer **never overfills**: once its configured capacity is reached,
+/// pushing a new entry will overwrite the **oldest** entry in the buffer.
+///
+/// This design ensures constant memory usage regardless of how many entries
+/// are pushed. The `capacity` therefore defines how far back you can "retreat"
+/// through the history — not the maximum number of times `push` can be called.
+///
+/// In other words:
+/// - The buffer always contains at most `N` entries.
+/// - Pushing beyond capacity overwrites the oldest entries.
+/// - The buffer behaves as a **ring buffer** rather than a growable list.
+///
+/// `LineHistory` is used internally by [`LexerCursor`] to track the length of
+/// each completed line (the column count before each newline).
 ///
 /// # Example
 ///
@@ -167,10 +174,10 @@ pub(crate) const LINE_HISTORY_SIZE: usize = 128;
 /// let mut h: LineHistory<2> = LineHistory::new();
 /// h.push(5).unwrap();
 /// h.push(7).unwrap();
-/// assert!(matches!(h.push(9), Err(SpanError::HistoryFull)));
+/// h.push(9).unwrap();
 ///
+/// assert_eq!(h.pop().unwrap(), 9);
 /// assert_eq!(h.pop().unwrap(), 7);
-/// assert_eq!(h.pop().unwrap(), 5);
 /// assert!(matches!(h.pop(), Err(SpanError::HistoryEmpty)));
 /// ```
 #[derive(Debug, Clone)]
@@ -207,12 +214,11 @@ impl<const N: usize> LineHistory<N> {
     /// Returns an error if the buffer is already full.
     #[inline]
     pub fn push(&mut self, v: usize) -> Result<(), SpanError> {
-        if self.len == N {
-            return Err(SpanError::HistoryFull);
-        }
         self.buf[self.head] = v;
         self.head = (self.head + 1) % N;
-        self.len += 1;
+        if self.len != N {
+            self.len += 1;
+        }
         Ok(())
     }
 
@@ -393,14 +399,14 @@ mod tests {
         dbg!(&h);
         h.push(3).unwrap();
         dbg!(&h);
-        assert!(matches!(h.push(4), Err(SpanError::HistoryFull)));
+        h.push(4).unwrap();
         dbg!(&h);
 
+        assert_eq!(h.pop().unwrap(), 4);
+        dbg!(&h);
         assert_eq!(h.pop().unwrap(), 3);
         dbg!(&h);
         assert_eq!(h.pop().unwrap(), 2);
-        dbg!(&h);
-        assert_eq!(h.pop().unwrap(), 1);
         assert!(matches!(h.pop(), Err(SpanError::HistoryEmpty)));
     }
 
@@ -413,10 +419,10 @@ mod tests {
 
         h.push(20).unwrap();
         h.push(30).unwrap();
-        assert!(matches!(h.push(40), Err(SpanError::HistoryFull)));
+        h.push(40).unwrap();
 
+        assert_eq!(h.pop().unwrap(), 40);
         assert_eq!(h.pop().unwrap(), 30);
-        assert_eq!(h.pop().unwrap(), 20);
         assert!(matches!(h.pop(), Err(SpanError::HistoryEmpty)));
     }
 
@@ -506,10 +512,8 @@ mod tests {
             cur.advance(b'\n').unwrap(); // pushes line length
         }
 
-        // Now history is full; next newline push should error.
         cur.advance(b'b').unwrap();
-        let err = cur.advance(b'\n').unwrap_err();
-        assert!(matches!(err, SpanError::HistoryFull));
+        cur.advance(b'\n').unwrap();
     }
 
     #[test]

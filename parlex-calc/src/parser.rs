@@ -101,12 +101,7 @@ pub struct CalcParserDriver<I> {
 
 impl<I> ParserDriver for CalcParserDriver<I>
 where
-    I: TryNextWithContext<
-            SymTab,
-            LexerStats,
-            Item = CalcToken,
-            Error: std::fmt::Display + 'static,
-        >,
+    I: TryNextWithContext<SymTab, LexerStats, Item = CalcToken, Error: std::fmt::Display + 'static>,
 {
     /// Parser metadata generated from the calculator grammar.
     type ParserData = ParData;

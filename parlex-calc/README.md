@@ -141,17 +141,6 @@ Prints both the **symbol table (`SymTab`)** and the **parsed token stream**.
 ]
 ```
 
-* Each line is treated as a **separate statement**, terminated by `;`.
-* The final standalone `;` produces an **empty statement**, represented as `TokenValue::None`.
-* The **symbol table** (`SymTab`) captures the evaluated results of identifiers:
-
-  * `x = 5`
-  * `y = 20`
-
-* The **token list** shows one parsed token per statement, plus a final empty statement marker.
-
-
-
 ## Building & testing
 
 At the repository root:

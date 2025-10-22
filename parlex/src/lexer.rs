@@ -126,6 +126,10 @@ pub struct LexerStats {
     /// The number of characters that were unread or pushed back into the stream.
     pub unreads: usize,
 
+    /// Longest streak of consecutive `self.unread.push()` calls during lexing.
+    /// Indicates the maximum backtrack depth reached.
+    pub max_consecutive_unreads: usize,
+
     /// The total number of characters processed by the lexer.
     pub chars: usize,
 
@@ -505,6 +509,10 @@ where
                                             Some(b) => {
                                                 self.unread.push(b);
                                                 self.stats.unreads += 1;
+                                                self.stats.max_consecutive_unreads = self
+                                                    .unread
+                                                    .len()
+                                                    .max(self.stats.max_consecutive_unreads);
                                                 self.cursor.retreat(b).map_err(|e| {
                                                     ParlexError::from_err(e, Some(self.span()))
                                                 })?;
@@ -557,6 +565,8 @@ where
                         Some(b) => {
                             self.unread.push(b);
                             self.stats.unreads += 1;
+                            self.stats.max_consecutive_unreads =
+                                self.unread.len().max(self.stats.max_consecutive_unreads);
                             self.cursor
                                 .retreat(b)
                                 .map_err(|e| ParlexError::from_err(e, Some(self.span())))?;

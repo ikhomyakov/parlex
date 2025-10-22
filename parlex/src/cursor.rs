@@ -148,7 +148,7 @@ pub enum SpanError {
 /// when calling [`LexerCursor::retreat`].  
 /// Once the buffer is full, pushing another newline via [`LexerCursor::advance`]
 /// will return [`SpanError::HistoryFull`].
-pub(crate) const LINE_HISTORY_SIZE: usize = 32;
+pub(crate) const LINE_HISTORY_SIZE: usize = 128;
 
 /// A fixed-size ring buffer storing recent line lengths.
 ///

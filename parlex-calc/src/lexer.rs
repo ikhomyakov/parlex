@@ -91,7 +91,7 @@ where
     type Token = CalcToken;
 
     /// Concrete lexer type parameterized by input, driver and context.
-    type Lexer = Lexer<I, Self, SymTab>;
+    type Lexer = Lexer<I, Self, Self::Context>;
 
     /// Externally supplied context available to actions (symbol table).
     type Context = SymTab;

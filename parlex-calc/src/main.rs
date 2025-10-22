@@ -149,8 +149,9 @@
 
 use clap::{Parser as ClapParser, Subcommand};
 use parlex_calc::{CalcParser, SymTab};
-use std::io::Read;
+use std::io::{self, Read, BufReader};
 use try_next::{IterInput, TryNextWithContext};
+use std::fs::File;
 
 #[derive(ClapParser, Debug)]
 #[command(version, about, long_about = None)]
@@ -166,11 +167,6 @@ enum Commands {
     Parse {},
 }
 
-fn open_input() -> std::io::Result<impl Iterator<Item = u8>> {
-    let iter = std::io::stdin().lock().bytes().map(Result::unwrap);
-    Ok(iter)
-}
-
 fn main() {
     env_logger::init();
 
@@ -179,7 +175,7 @@ fn main() {
     match args.command {
         Commands::Parse {} => {
             let mut symtab = SymTab::new();
-            let input = IterInput::from(open_input().expect("can't open stdin"));
+            let input = BufReader::new(io::stdin());
             let mut parser = CalcParser::try_new(input).expect("can't create parser");
             let toks = parser
                 .try_collect_with_context(&mut symtab)

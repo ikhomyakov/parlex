@@ -105,7 +105,7 @@ where
             SymTab,
             LexerStats,
             Item = CalcToken,
-            Error: std::error::Error + Send + Sync + 'static,
+            Error: std::fmt::Display + 'static,
         >,
 {
     /// Parser metadata generated from the calculator grammar.
@@ -115,7 +115,7 @@ where
     type Token = CalcToken;
 
     /// Concrete parser engine type.
-    type Parser = Parser<I, Self, SymTab>;
+    type Parser = Parser<I, Self, Self::Context>;
 
     /// Context (symbol table or shared state).
     type Context = SymTab;
@@ -429,14 +429,14 @@ where
 /// ```
 pub struct CalcParser<I>
 where
-    I: TryNextWithContext<SymTab, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
+    I: TryNextWithContext<SymTab, Item = u8, Error: std::fmt::Display + 'static>,
 {
     parser: Parser<CalcLexer<I>, CalcParserDriver<CalcLexer<I>>, SymTab>,
 }
 
 impl<I> CalcParser<I>
 where
-    I: TryNextWithContext<SymTab, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
+    I: TryNextWithContext<SymTab, Item = u8, Error: std::fmt::Display + 'static>,
 {
     pub fn try_new(input: I) -> Result<Self, ParlexError> {
         let lexer = CalcLexer::try_new(input)?;
@@ -449,7 +449,7 @@ where
 }
 impl<I> TryNextWithContext<SymTab, (LexerStats, ParserStats)> for CalcParser<I>
 where
-    I: TryNextWithContext<SymTab, Item = u8, Error: std::error::Error + Send + Sync + 'static>,
+    I: TryNextWithContext<SymTab, Item = u8, Error: std::fmt::Display + 'static>,
 {
     type Item = CalcToken;
     type Error = ParlexError;

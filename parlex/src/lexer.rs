@@ -249,8 +249,14 @@ where
         })
     }
 
+    /// Returns the span of the current lexeme.
     pub fn span(&self) -> Span {
         self.cursor.span
+    }
+
+    /// Returns the reference to the span of the current lexeme.
+    pub fn span_ref(&self) -> &Span {
+        &self.cursor.span
     }
 
     #[cfg(not(test))]

@@ -12,6 +12,8 @@ The **ALEX** lexer generator offers expressive power comparable to that of lex o
 
 The **ASLR** parser generator implements the **SLR(1)** parsing algorithm, which is somewhat less general than the **LALR(1)** method employed by yacc and bison. Nevertheless, ASLR introduces a significant enhancement: it supports **dynamic runtime resolution of shift/reduce ambiguities**, offering greater flexibility in domains such as **Prolog**, where operator definitions may be introduced or redefined at runtime.
 
+Parlex is **encoding-agnostic** — the lexer operates on raw bytes and makes no assumptions about the encoding of the input stream. If your application needs to handle a specific encoding, you do so in the `LexerDriver` action callbacks. For example, in Rust you can validate UTF-8 token text with `std::str::from_utf8`, or use crates like `encoding_rs` to transcode from encodings such as ISO 8859-1 or Windows-1252.
+
 ## Crates
 
 ### 📦 [parlex](./parlex)

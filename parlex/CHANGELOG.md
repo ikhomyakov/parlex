@@ -9,9 +9,22 @@ and this project adheres to [Semantic Versioning].
 [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
 
 
+## [0.4.0] — 2026-04-21
+
+### Breaking Changes
+
+- Upgraded to **[`try-next`] 0.5.0**.
+
+### Changes
+
+- Switched license from LGPL-3.0-or-later to **MIT**.
+- Removed unused dependencies (`regex-syntax`); moved `env_logger` to dev-dependencies.
+- Documented encoding-agnostic design in README.
+
+
 ## [0.3.x] — 2025-10-15
 
-### ⚠️  Breaking Changes
+### Breaking Changes
 
 This release introduces a **new type parameter `C` (context)** to the core [`Lexer`] and [`Parser`] structs.  
 The change was driven by the upgrade to **[`try-next`] version 0.4.0**, which refined the `TryNextWithContext` trait to make the context type (`C`) explicit and generic:
@@ -24,7 +37,7 @@ The change was driven by the upgrade to **[`try-next`] version 0.4.0**, which re
 
 ## [0.2.x] — 2025-10-12
 
-### ⚠️  Breaking Changes
+### Breaking Changes
 
 We completely reworked the **Parlex API** in this release — thank you for your patience as we refined the design for clarity, composability, and stronger type safety.
 

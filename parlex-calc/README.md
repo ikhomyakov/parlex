@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/parlex-calc.svg)](https://crates.io/crates/parlex-calc)
 [![Documentation](https://docs.rs/parlex-calc/badge.svg)](https://docs.rs/parlex-calc)
-[![License: LGPL-3.0-or-later](https://img.shields.io/badge/License-LGPL%203.0--or--later-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-stable-brightgreen.svg)](https://www.rust-lang.org)
 
 A **sample calculator** built using the `parlex` and `parlex-gen` toolchain.
@@ -153,9 +153,9 @@ cargo test
 
 ## License
 
-Copyright (c) 2005–2025 IKH Software, Inc.
+Copyright (c) 2005–2026 IKH Software, Inc.
 
-Released under the terms of the GNU Lesser General Public License, version 3.0 or (at your option) any later version (LGPL-3.0-or-later).
+Released under the terms of the MIT License.
 
 ## Contributing
 

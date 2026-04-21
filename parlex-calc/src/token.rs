@@ -12,7 +12,6 @@
 //! These types are produced by the lexer and consumed by later stages of the
 //! pipeline (e.g., the parser and semantic analysis).
 use crate::TokenID;
-use clap::value_parser;
 use parlex::{Span, Token};
 use smartstring::alias::String;
 

@@ -349,13 +349,12 @@ checksum = "a4895175b425cb1f87721b59f0f286c2092bd4af812243672510e1ac53e2e0ad"
 
 [[package]]
 name = "parlex"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "env_logger",
  "hex",
  "log",
  "regex-automata 0.4.12",
- "regex-syntax 0.8.7",
  "smartstring",
  "thiserror",
  "try-next",
@@ -363,13 +362,12 @@ dependencies = [
 
 [[package]]
 name = "parlex-calc"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "clap",
  "env_logger",
  "include_bytes_aligned",
  "indexmap",
- "log",
  "parlex",
  "parlex-gen",
  "smartstring",
@@ -379,21 +377,16 @@ dependencies = [
 
 [[package]]
 name = "parlex-gen"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "chumsky",
  "clap",
- "env_logger",
- "hex",
- "log",
  "logos",
  "once_cell",
  "parlex",
  "regex",
  "regex-automata 0.4.12",
- "regex-syntax 0.8.7",
- "smartstring",
 ]
 
 [[package]]
@@ -604,7 +597,9 @@ dependencies = [
 
 [[package]]
 name = "try-next"
-version = "0.4.0"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0f12afa31d1b17de5c0126eab171fd09d74bcbd6f01d47368fa5d3bedea331d"
 
 [[package]]
 name = "unicode-ident"

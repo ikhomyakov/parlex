@@ -14,11 +14,12 @@ readme = "README.md"
 
 [dependencies]
 regex-automata.workspace = true
-regex-syntax.workspace = true
 smartstring.workspace = true
-env_logger.workspace = true
 hex.workspace = true
 log.workspace = true
 try-next.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+env_logger.workspace = true
 

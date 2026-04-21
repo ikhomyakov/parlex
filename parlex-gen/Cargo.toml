@@ -33,11 +33,6 @@ cli = ["clap"]
 [dependencies]
 anyhow.workspace = true
 regex-automata.workspace = true
-regex-syntax.workspace = true
-smartstring.workspace = true
-env_logger.workspace = true
-hex.workspace = true
-log.workspace = true
 parlex.workspace = true
 clap = { workspace = true, optional = true }
 logos.workspace = true

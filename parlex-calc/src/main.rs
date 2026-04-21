@@ -149,9 +149,8 @@
 
 use clap::{Parser as ClapParser, Subcommand};
 use parlex_calc::{CalcParser, SymTab};
-use std::fs::File;
-use std::io::{self, BufReader, Read};
-use try_next::{IterInput, TryNextWithContext};
+use std::io::{self, BufReader};
+use try_next::TryNextWithContext;
 
 #[derive(ClapParser, Debug)]
 #[command(version, about, long_about = None)]

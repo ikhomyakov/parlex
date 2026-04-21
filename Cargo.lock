@@ -355,7 +355,6 @@ dependencies = [
  "hex",
  "log",
  "regex-automata 0.4.12",
- "regex-syntax 0.8.7",
  "smartstring",
  "thiserror",
  "try-next",
@@ -369,7 +368,6 @@ dependencies = [
  "env_logger",
  "include_bytes_aligned",
  "indexmap",
- "log",
  "parlex",
  "parlex-gen",
  "smartstring",
@@ -384,16 +382,11 @@ dependencies = [
  "anyhow",
  "chumsky",
  "clap",
- "env_logger",
- "hex",
- "log",
  "logos",
  "once_cell",
  "parlex",
  "regex",
  "regex-automata 0.4.12",
- "regex-syntax 0.8.7",
- "smartstring",
 ]
 
 [[package]]
@@ -604,7 +597,9 @@ dependencies = [
 
 [[package]]
 name = "try-next"
-version = "0.4.0"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0f12afa31d1b17de5c0126eab171fd09d74bcbd6f01d47368fa5d3bedea331d"
 
 [[package]]
 name = "unicode-ident"

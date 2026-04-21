@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning].
 [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
 
 
+## [0.4.0] — 2026-04-21
+
+### ⚠️  Breaking Changes
+
+- Upgraded to **[`try-next`] 0.5.0**.
+
+### ✨ New Features
+
+- **Span tracking**: Introduced `LexerCursor` with `Span`, `Position`, and `LineHistory` for precise source location tracking. Both `Token` and `ParlexError` now carry `Option<Span>`.
+- **Ring-buffer line history**: `LineHistory` is now a fixed-capacity ring buffer, allowing bounded retreat without unbounded memory growth.
+- Added `Lexer::span_ref()` for borrowing the current span.
+- Added `max_consecutive_unreads` to `LexerStats`.
+
+### 🔧 Improvements
+
+- Relaxed input error bound from `std::error::Error` to `Display`.
+- Reworked error handling with `ParlexError` carrying optional span context.
+- Removed unused dependencies (`regex-syntax`); moved `env_logger` to dev-dependencies.
+- Documented encoding-agnostic design in README.
+
+### 📜 License
+
+- Switched license from LGPL-3.0-or-later to **MIT**.
+
+
 ## [0.3.x] — 2025-10-15
 
 ### ⚠️  Breaking Changes

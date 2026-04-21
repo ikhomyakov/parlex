@@ -36,9 +36,9 @@ Parlex is a Rust lex/yacc-style toolchain with clean separation between generate
 
 **Key design choice — dynamic ambiguity resolution:** Unlike yacc/bison which resolve shift/reduce conflicts statically, ASLR supports runtime resolution via `ParserDriver::resolve_ambig`, enabling languages like Prolog where operator definitions change at runtime.
 
-## External Path Dependency
+## Encoding
 
-`try-next` is referenced as a local path dependency at `../try-next`. This sibling repo must be present to build.
+Parlex is encoding-agnostic — the lexer operates on raw bytes. Encoding handling (UTF-8 validation, Latin1 transcoding, etc.) is done in `LexerDriver` action callbacks, not in the core library.
 
 ## Workspace
 

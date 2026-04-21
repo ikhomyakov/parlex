@@ -43,5 +43,5 @@ Parlex is a Rust lex/yacc-style toolchain with clean separation between generate
 ## Workspace
 
 - Rust edition 2024, minimum rust-version 1.89
-- License: LGPL-3.0-or-later
+- License: MIT
 - Uses `smartstring` for efficient short string storage in tokens

@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/parlex-gen.svg)](https://crates.io/crates/parlex-gen)
 [![Documentation](https://docs.rs/parlex-gen/badge.svg)](https://docs.rs/parlex-gen)
-[![License: LGPL-3.0-or-later](https://img.shields.io/badge/License-LGPL%203.0--or--later-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-stable-brightgreen.svg)](https://www.rust-lang.org)
 
 Lexer generator ALEX and parser generator ASLR.
@@ -188,10 +188,9 @@ expr8: Expr -> ( Expr )
 
 ## License
 
-Copyright (c) 2005–2025 IKH Software, Inc.
+Copyright (c) 2005–2026 IKH Software, Inc.
 
-Released under the terms of the GNU Lesser General Public License, version 3.0
-or (at your option) any later version (LGPL-3.0-or-later).
+Released under the terms of the MIT License.
 
 ## See Also
 

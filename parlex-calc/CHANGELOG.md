@@ -10,13 +10,13 @@ and this project adheres to [Semantic Versioning].
 
 ## [0.4.0] — 2026-04-21
 
-### 🧩 Changes
+### Changes
 
 - Updated to depend on **[parlex](https://crates.io/crates/parlex)** `0.4.0` and **[`try-next`]** `0.5.0`.
 - Removed unused dependencies (`log`); cleaned up unused imports.
 - Added missing `LICENSE.md`.
 
-### 📜 License
+### License
 
 - Switched license from LGPL-3.0-or-later to **MIT**.
 
@@ -25,12 +25,12 @@ and this project adheres to [Semantic Versioning].
 
 ## [0.3.x] — 2025-10-15
 
-### ✨ Completed Example
+### Completed Example
 
 The **`parlex-calc`** example has been fully completed, refactored, and documented.  
 It now demonstrates a full lexer–parser pipeline using the updated Parlex 0.3.0 API.
 
-### ⚙️  Breaking Changes
+### Breaking Changes
 
 - Updated to **`try-next` 0.4.0**, introducing explicit context type parameters in lexer and parser definitions.
 

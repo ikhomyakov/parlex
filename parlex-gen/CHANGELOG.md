@@ -11,20 +11,20 @@ and this project adheres to [Semantic Versioning].
 
 ## [0.4.0] — 2026-04-21
 
-### 🧩 Changes
+### Changes
 
 - Updated to depend on **[parlex](https://crates.io/crates/parlex)** `0.4.0`.
 - Removed unused dependencies (`regex-syntax`, `smartstring`, `env_logger`, `hex`, `log`).
 - Documented encoding-agnostic design in README.
 
-### 📜 License
+### License
 
 - Switched license from LGPL-3.0-or-later to **MIT**.
 
 
 ## [0.2.x] — 2025-10-12
 
-### 🧩 Changes
+### Changes
 - Updated to depend on **[parlex](https://crates.io/crates/parlex)** `0.2.0`.
 - No breaking changes were introduced in this crate.
 

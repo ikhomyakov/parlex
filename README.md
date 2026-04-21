@@ -16,7 +16,7 @@ Parlex is **encoding-agnostic** — the lexer operates on raw bytes and makes no
 
 ## Crates
 
-### 📦 [parlex](./parlex)
+### [parlex](./parlex)
 
 [![Crates.io](https://img.shields.io/crates/v/parlex.svg)](https://crates.io/crates/parlex)
 [![Documentation](https://docs.rs/parlex/badge.svg)](https://docs.rs/parlex)
@@ -31,7 +31,7 @@ The core library that defines generic traits and data structures to support lexe
 Generated lexers and parsers depend on this crate. Users build their own custom lexers and parsers based on the generated code, using the traits and data structures defined here.
 
 
-### 🔧 [parlex-gen](./parlex-gen)
+### [parlex-gen](./parlex-gen)
 
 [![Crates.io](https://img.shields.io/crates/v/parlex-gen.svg)](https://crates.io/crates/parlex-gen)
 [![Documentation](https://docs.rs/parlex-gen/badge.svg)](https://docs.rs/parlex-gen)
@@ -51,7 +51,7 @@ Both generators produce code that uses the `parlex` core library.
 - Generated code uses parlex traits and data structures
 
 
-### 🧮 [parlex-calc](./parlex-calc)
+### [parlex-calc](./parlex-calc)
 
 [![Crates.io](https://img.shields.io/crates/v/parlex-calc.svg)](https://crates.io/crates/parlex-calc)
 [![Documentation](https://docs.rs/parlex-calc/badge.svg)](https://docs.rs/parlex-calc)

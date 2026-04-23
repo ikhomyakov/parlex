@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning].
 [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
 
 
+## [0.4.1] — 2026-04-22
+
+### Fixes
+
+- Disabled Unicode mode (`unicode(false)`) in regex syntax config for DFA compilation, making generated lexers fully encoding-agnostic. Character classes like `\w` and `.` now operate on raw bytes rather than Unicode code points.
+
 ## [0.4.0] — 2026-04-21
 
 ### Changes

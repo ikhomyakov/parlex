@@ -251,7 +251,7 @@ pub fn generate<P: AsRef<Path>>(
     for m in modes.iter() {
         let rules = rule_vecs.get(*m).ok_or(anyhow!("Missing mode {:?}", m))?;
         let mut hirs = Vec::new();
-        let conf = syntax::Config::new().utf8(false);
+        let conf = syntax::Config::new().utf8(false).unicode(false);
         for r in rules.iter() {
             hirs.push(syntax::parse_with(&r.regex, &conf).with_context(|| {
                 format!(
